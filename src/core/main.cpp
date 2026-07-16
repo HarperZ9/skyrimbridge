@@ -28,6 +28,8 @@
 #include "CompatDetect.h"
 #include "PapyrusBridge.h"
 #include "WriteBackProcessor.h"
+#include "WeatherEditor.h"
+#include "EditorIDCache.h"
 
 // GPU tier
 #include "D3D11Hook.h"
@@ -303,6 +305,14 @@ static void DoFrameUpdate()
         SKSE::log::error("SkyrimBridge: PapyrusBridge::UpdateCache threw");
     }
 
+    // 6. Weather workshop: weather-change capture, preset auto-load and
+    //    hot-reload, auto-apply of live edits.
+    try {
+        SB::WeatherEditor::Get().Update();
+    } catch (...) {
+        SKSE::log::error("SkyrimBridge: WeatherEditor threw");
+    }
+
     ++s_frameCount;
 }
 
@@ -372,6 +382,12 @@ static void __stdcall OnENBCallback(int a_callbackType)
 static void OnMessage(SKSE::MessagingInterface::Message* a_msg)
 {
     switch (a_msg->type) {
+    case SKSE::MessagingInterface::kPostLoad:
+        // Editor-ID cache hooks must install before data loading begins so
+        // the weather workshop can name forms (presets are keyed by EditorID).
+        SB::EditorIDCache::Get().Install();
+        break;
+
     case SKSE::MessagingInterface::kPostPostLoad:
         // ENB (d3d11.dll) is loaded by now if it is present at all.
         if (ENBInterface::Init()) {
@@ -409,6 +425,12 @@ static void OnMessage(SKSE::MessagingInterface::Message* a_msg)
             SKSE::log::error("SkyrimBridge: current_path failed: {}", ec.message());
 
         SB::PapyrusBridge::Register();
+
+        // Weather workshop: live weather-record editing with per-weather
+        // preset auto-load and hot-reload.
+        SB::WeatherEditor::Get().SetPresetDir(configDir / "WeatherPresets");
+        SKSE::log::info("SkyrimBridge: weather workshop ready "
+            "(presets in SkyrimBridge/WeatherPresets, hot-reload live)");
 
         // ── GPU tier ─────────────────────────────────────────────────────
         LoadGPUConfig(configDir);

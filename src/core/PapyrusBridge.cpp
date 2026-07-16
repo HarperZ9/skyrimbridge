@@ -19,6 +19,7 @@
 
 #include "PapyrusBridge.h"
 #include "BridgeData.h"
+#include "WeatherEditor.h"
 #include <RE/Skyrim.h>
 #include <SKSE/SKSE.h>
 #include <cstring>
@@ -92,6 +93,59 @@ namespace SB::PapyrusBridge
         return static_cast<int32_t>(kParamCount);
     }
 
+    // ── Weather workshop natives ─────────────────────────────────────────
+    // Console-callable (cgf "SkyrimBridge.<name>"): the control surface for
+    // the live weather editor when no GUI is present.
+
+    static void CaptureWeather(RE::StaticFunctionTag*)
+    {
+        WeatherEditor::Get().CaptureCurrentWeather();
+    }
+
+    static void ApplyWeather(RE::StaticFunctionTag*)
+    {
+        WeatherEditor::Get().MarkDirty();
+        WeatherEditor::Get().ApplyToGame();
+    }
+
+    static void RevertWeather(RE::StaticFunctionTag*)
+    {
+        WeatherEditor::Get().RevertToOriginal();
+    }
+
+    static bool SaveWeatherPreset(RE::StaticFunctionTag*, RE::BSFixedString a_name)
+    {
+        return WeatherEditor::Get().SavePreset(a_name.c_str());
+    }
+
+    static bool LoadWeatherPreset(RE::StaticFunctionTag*, RE::BSFixedString a_name)
+    {
+        bool ok = WeatherEditor::Get().LoadPreset(a_name.c_str());
+        if (ok)
+            WeatherEditor::Get().ApplyToGame();
+        return ok;
+    }
+
+    static void SetWeatherCompare(RE::StaticFunctionTag*, bool a_original)
+    {
+        WeatherEditor::Get().SetCompareMode(a_original);
+    }
+
+    static void ForceWeatherByID(RE::StaticFunctionTag*, int32_t a_formID)
+    {
+        auto* weather = RE::TESForm::LookupByID<RE::TESWeather>(
+            static_cast<RE::FormID>(a_formID));
+        if (weather)
+            WeatherEditor::Get().ForceWeather(weather);
+        else
+            SKSE::log::warn("PapyrusBridge: no weather with form ID 0x{:08X}", a_formID);
+    }
+
+    static void ClearForcedWeather(RE::StaticFunctionTag*)
+    {
+        WeatherEditor::Get().ClearForcedWeather();
+    }
+
     // ── Registration ─────────────────────────────────────────────────────
 
     bool Register()
@@ -110,7 +164,16 @@ namespace SB::PapyrusBridge
         vm->RegisterFunction("IsInterior",        "SkyrimBridge", IsInterior);
         vm->RegisterFunction("GetParamCount",     "SkyrimBridge", GetParamCount);
 
-        SKSE::log::info("PapyrusBridge: registered 7 native functions under 'SkyrimBridge'");
+        vm->RegisterFunction("CaptureWeather",     "SkyrimBridge", CaptureWeather);
+        vm->RegisterFunction("ApplyWeather",       "SkyrimBridge", ApplyWeather);
+        vm->RegisterFunction("RevertWeather",      "SkyrimBridge", RevertWeather);
+        vm->RegisterFunction("SaveWeatherPreset",  "SkyrimBridge", SaveWeatherPreset);
+        vm->RegisterFunction("LoadWeatherPreset",  "SkyrimBridge", LoadWeatherPreset);
+        vm->RegisterFunction("SetWeatherCompare",  "SkyrimBridge", SetWeatherCompare);
+        vm->RegisterFunction("ForceWeatherByID",   "SkyrimBridge", ForceWeatherByID);
+        vm->RegisterFunction("ClearForcedWeather", "SkyrimBridge", ClearForcedWeather);
+
+        SKSE::log::info("PapyrusBridge: registered 15 native functions under 'SkyrimBridge'");
         return true;
     }
 }

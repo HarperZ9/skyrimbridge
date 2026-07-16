@@ -31,6 +31,32 @@ name a piece of game state, a shader can read it.
 
 See [docs/parameters.md](docs/parameters.md) for the full parameter contract.
 
+## The weather workshop
+
+The plugin carries a live weather editor: it captures the active weather
+record (all 17 color types across four times of day, fog planes and powers,
+wind, sun glare, cloud layers, directional ambient, the associated image
+space and volumetric lighting), applies edits back to the running game, and
+manages per-weather presets under
+`Data/SKSE/Plugins/SkyrimBridge/WeatherPresets/<EditorID>.ini`.
+
+The workshop loop needs no GUI:
+
+- **Auto-load**: when the game transitions to a weather that has a preset,
+  the preset applies automatically.
+- **Hot-reload**: edit the preset INI in any text editor while the game
+  runs; the change lands within a second. Presets overlay the live record,
+  so a preset carrying only `[Colors]` leaves everything else untouched.
+- **Console**: `cgf "SkyrimBridge.CaptureWeather"`, `SaveWeatherPreset`,
+  `LoadWeatherPreset`, `RevertWeather`, `SetWeatherCompare` (A/B against
+  the original), `ForceWeatherByID`, `ClearForcedWeather`.
+
+The offline half of the workshop is
+[elder-weathers](https://github.com/HarperZ9/elder-weathers): its atmosphere
+model authors complete weather plugins and exports presets in this same
+dialect, so model-authored weathers can be tuned live and live tunings can
+be compared back against the model.
+
 ## Runtime write-back
 
 Measurement is one direction; `WriteBackConfig.ini` is the other. Each rule

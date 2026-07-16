@@ -32,6 +32,8 @@ add_commonlibsse_plugin(
         src/core/CompatDetect.cpp
         src/core/PapyrusBridge.cpp
         src/core/WriteBackProcessor.cpp
+        src/core/WeatherEditor.cpp
+        src/core/EditorIDCache.cpp
 
         # Core trackers (domains 1-10)
         src/core/CelestialTracker.cpp
