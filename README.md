@@ -42,6 +42,29 @@ rule, and ENB's editor becomes a real-time engine control. All targets are
 typed engine access, no raw addresses; every rule ships disabled until you
 enable it.
 
+## The GPU tier
+
+Beyond measurement and write-back, the plugin carries a GPU rendering tier:
+a compute infrastructure (shader compilation, dispatch, render-pass
+orchestration, Hi-Z depth pyramid), a physically-based atmosphere renderer
+(Rayleigh and Mie scattering LUTs), and raymarched volumetric clouds.
+Configure it in `config/GPU.ini`; volumetric clouds compile their shaders in
+the background after data load and are off by default.
+
+Two modes, auto-detected:
+
+- **Proxy mode**: the bundled d3d11 proxy is loaded, either directly as the
+  game's `d3d11.dll` or chain-loaded through ENB's `[PROXY] ProxyLibrary`
+  setting. Full mid-frame injection: depth and G-buffer access, the Hi-Z
+  pyramid builds, clouds render into the scene.
+- **Legacy mode** (plain ENB, no proxy): the tier initializes and its compute
+  work runs at present time, but mid-frame passes (clouds, Hi-Z) stay dormant
+  because the injection points require the proxy. Useful for profiling and
+  capture; not yet a visual path.
+
+In-game isolation hotkeys: F7 mid-frame dispatch, F8 compute and trackers,
+F9 render passes, F10 frame capture (600 frames), F11 GPU profiler.
+
 ## Requirements
 
 - Skyrim SE or AE with SKSE and Address Library.

@@ -29,6 +29,23 @@
 #include "PapyrusBridge.h"
 #include "WriteBackProcessor.h"
 
+// GPU tier
+#include "D3D11Hook.h"
+#include "ComputeManager.h"
+#include "SRVInjector.h"
+#include "RenderPassManager.h"
+#include "RenderPipeline.h"
+#include "HiZPyramid.h"
+#include "PhaseDispatcher.h"
+#include "AtmosphereRenderer.h"
+#include "VolumetricClouds.h"
+#include "SceneData.h"
+#include "BootDiagnostics.h"
+#include "GPUProfiler.h"
+
+#include <thread>
+#include <fstream>
+
 // Individual tracker headers (Update() declarations)
 #include "../Trackers.h"
 
@@ -50,6 +67,42 @@
 // the render thread.
 static std::atomic<bool> s_gameReady{false};
 static uint32_t s_frameCount = 0;
+
+// When ENB's BeginFrame callback drives the frame update, the present-hook
+// path must not run it a second time.
+static std::atomic<bool> s_enbDrivesUpdates{false};
+
+// ── GPU tier configuration (config/GPU.ini next to the plugin) ──────────────
+struct GPUConfig
+{
+    bool enableGPUTier = true;        // master switch for the D3D11 hook
+    bool enableAtmosphere = true;     // physically-based sky LUTs + celestials
+    bool enableVolumetricClouds = false;  // heavy shader compile; off by default
+};
+static GPUConfig s_gpuConfig;
+
+static void LoadGPUConfig(const std::filesystem::path& configDir)
+{
+    std::ifstream in(configDir / "GPU.ini");
+    if (!in) return;  // defaults stand
+    std::string line;
+    auto truthy = [](const std::string& v) {
+        return v == "1" || v == "true" || v == "True" || v == "TRUE";
+    };
+    while (std::getline(in, line)) {
+        auto eq = line.find('=');
+        if (eq == std::string::npos) continue;
+        std::string key = line.substr(0, eq);
+        std::string val = line.substr(eq + 1);
+        key.erase(0, key.find_first_not_of(" \t"));
+        key.erase(key.find_last_not_of(" \t\r") + 1);
+        val.erase(0, val.find_first_not_of(" \t"));
+        val.erase(val.find_last_not_of(" \t\r") + 1);
+        if (key == "EnableGPUTier")           s_gpuConfig.enableGPUTier = truthy(val);
+        else if (key == "EnableAtmosphere")   s_gpuConfig.enableAtmosphere = truthy(val);
+        else if (key == "EnableVolumetricClouds") s_gpuConfig.enableVolumetricClouds = truthy(val);
+    }
+}
 
 // ── NaN/Inf sanitization ─────────────────────────────────────────────────────
 // Prevents corrupt floats from propagating to ENB shaders or shared memory.
@@ -208,6 +261,16 @@ static void DoFrameUpdate()
 
     SanitizeAllData(data);
 
+    // GPU tier: rebuild scene matrices for compute consumers, refresh the
+    // atmosphere LUTs when the sun has moved.
+    SB::SceneMatrices::Get().Update(data);
+    if (SB::AtmosphereRenderer::Get().IsInitialized()) {
+        float sunZenithCos = data.celestial.SunDirection.y;
+        float sunAzimuth = std::atan2(data.celestial.SunDirection.x,
+                                      data.celestial.SunDirection.z);
+        SB::AtmosphereRenderer::Get().UpdateLUTs(sunZenithCos, sunAzimuth);
+    }
+
     // 1. ENB shader parameters (dirty-tracked push of the whole table)
     ENBInterface::PushAllData(data);
 
@@ -272,6 +335,16 @@ static void RunFrameUpdate()
     }
 }
 
+// ── Present-hook entry (called by D3D11Hook each frame) ─────────────────────
+// When ENB's callback already drives updates, this is a no-op so the frame
+// is never measured twice.
+void RunStandaloneFrameUpdate()
+{
+    if (s_enbDrivesUpdates.load(std::memory_order_relaxed))
+        return;
+    RunFrameUpdate();
+}
+
 // ── ENB callback ─────────────────────────────────────────────────────────────
 // BeginFrame fires right after present, at the start of the next frame's CPU
 // work: parameters pushed here are consumed by the frame being built, and the
@@ -303,10 +376,11 @@ static void OnMessage(SKSE::MessagingInterface::Message* a_msg)
         // ENB (d3d11.dll) is loaded by now if it is present at all.
         if (ENBInterface::Init()) {
             ENBInterface::SetCallbackFunction(OnENBCallback);
-            SKSE::log::info("SkyrimBridge: ENB callback registered");
+            s_enbDrivesUpdates.store(true, std::memory_order_relaxed);
+            SKSE::log::info("SkyrimBridge: ENB callback registered (ENB drives updates)");
         } else {
-            SKSE::log::warn("SkyrimBridge: ENBSeries not detected, plugin idle "
-                "(parameters stay at their zero defaults)");
+            SKSE::log::info("SkyrimBridge: ENBSeries not detected; the present "
+                "hook drives updates and parameters publish to shared memory");
         }
         break;
 
@@ -335,6 +409,73 @@ static void OnMessage(SKSE::MessagingInterface::Message* a_msg)
             SKSE::log::error("SkyrimBridge: current_path failed: {}", ec.message());
 
         SB::PapyrusBridge::Register();
+
+        // ── GPU tier ─────────────────────────────────────────────────────
+        LoadGPUConfig(configDir);
+        if (s_gpuConfig.enableGPUTier) {
+            SB::BootDiag::Init();
+            if (D3D11Hook::Init()) {
+                auto* dev = D3D11Hook::GetDevice();
+                auto* ctx = D3D11Hook::GetContext();
+                auto* sc  = D3D11Hook::GetSwapChain();
+
+                if (dev && ctx && sc) {
+                    SB::ComputeManager::Get().Initialize(dev, ctx);
+                    SB::SRVInjector::Get().Initialize(ctx);
+                    SB::RenderPassManager::Get().Initialize(dev, ctx);
+                    SB::RenderPipeline::Get().Initialize(dev, ctx, sc);
+
+                    if (SB::GPUProfiler::Get().Initialize(dev, ctx))
+                        SKSE::log::info("SkyrimBridge: GPU profiler ready (F11)");
+
+                    // Hi-Z depth pyramid: builds at PostGeometry:1 (proxy mode
+                    // only; without depth access the pass simply never runs).
+                    if (SB::HiZPyramid::Get().Initialize(dev, sc)) {
+                        SB::SRVInjector::Get().RegisterSRV(
+                            SB::HiZPyramid::kSRVSlot, SB::HiZPyramid::Get().GetSRV());
+                        SB::RenderPipeline::Get().AddPass({
+                            .name     = "HiZPyramid",
+                            .stage    = SB::PipelineStage::PostGeometry,
+                            .priority = 1,
+                            .enabled  = true,
+                            .execute  = [](SB::PassContext& pctx) {
+                                auto& hiz = SB::HiZPyramid::Get();
+                                if (hiz.IsInitialized() && hiz.IsEnabled())
+                                    hiz.BuildPyramid(pctx.context);
+                            },
+                        });
+                    }
+
+                    // Mid-frame dispatch (fires only in proxy mode).
+                    SB::PhaseDispatcher::Get().Initialize(
+                        ctx, D3D11Hook::GetInvalidateCacheFn());
+
+                    if (s_gpuConfig.enableAtmosphere) {
+                        if (SB::AtmosphereRenderer::Get().Initialize(dev, ctx, sc))
+                            SKSE::log::info("SkyrimBridge: atmosphere renderer active");
+                    }
+
+                    if (s_gpuConfig.enableVolumetricClouds) {
+                        // Heavy shader compilation: run off the main thread so
+                        // kDataLoaded is never blocked. Pass registration is
+                        // mutex-guarded; noise generation stays lazy on the
+                        // render thread.
+                        std::thread([dev, ctx, sc]() {
+                            SKSE::log::info("SkyrimBridge: compiling volumetric "
+                                "cloud shaders in the background");
+                            bool ok = SB::VolumetricClouds::Get().Initialize(dev, ctx, sc);
+                            SKSE::log::info("SkyrimBridge: volumetric clouds {}",
+                                ok ? "active" : "failed to initialize");
+                        }).detach();
+                    }
+
+                    SKSE::log::info("SkyrimBridge: GPU tier initialized ({} mode)",
+                        D3D11Hook::IsProxyActive() ? "proxy" : "legacy");
+                }
+            } else {
+                SKSE::log::warn("SkyrimBridge: GPU tier unavailable (hook failed)");
+            }
+        }
 
         s_gameReady.store(true, std::memory_order_release);
         SKSE::log::info("SkyrimBridge: ready ({} parameters defined)", SB::kParamCount);

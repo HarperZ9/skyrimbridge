@@ -1,0 +1,25 @@
+LIBRARY d3d11
+
+EXPORTS
+    ; === Intercepted exports (our implementations) ===
+    D3D11CreateDevice = SB_D3D11CreateDevice
+    D3D11CreateDeviceAndSwapChain = SB_D3D11CreateDeviceAndSwapChain
+
+    ; === D3D11Core* exports (ASM trampolines -> real d3d11.dll) ===
+    ; DXGI calls these internally during device creation.
+    ; ENB exports exactly these 4 + the 2 Create functions above = 6 total.
+    ; ENB does NOT export D3DKMT*, D3DPerformance*, OpenAdapter*, etc.
+    D3D11CoreCreateDevice = Trampoline_D3D11CoreCreateDevice
+    D3D11CoreCreateLayeredDevice = Trampoline_D3D11CoreCreateLayeredDevice
+    D3D11CoreGetLayeredDeviceSize = Trampoline_D3D11CoreGetLayeredDeviceSize
+    D3D11CoreRegisterLayers = Trampoline_D3D11CoreRegisterLayers
+
+    ; === SkyrimBridge proxy API ===
+    SB_GetProxyInterface
+    PG_GetProxyInterface
+
+    ; === Force discrete GPU on laptops ===
+    ; Data exports (value=1). ENB exports NvOptimusEnablement.
+    ; Without these, laptops may use the integrated GPU.
+    NvOptimusEnablement DATA
+    AmdPowerXpressRequestHighPerformance DATA
