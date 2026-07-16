@@ -31,22 +31,36 @@ name a piece of game state, a shader can read it.
 
 See [docs/parameters.md](docs/parameters.md) for the full parameter contract.
 
-## What is in this repository today
-
-This repository is the home of the public contract: the HLSL API headers in
-`shaders/` and the parameter documentation in `docs/`. Preset authors can build
-against these now; the `SB_*` names and packing are the stable surface.
-
-The plugin's C++ source is being extracted from the larger codebase it grew up
-in and will land here as a standalone CommonLibSSE-NG build. There is no
-release from this repository yet; the first release will ship the built plugin
-alongside the extracted source. The API contract does not change when the
-source arrives.
-
 ## Requirements
 
 - Skyrim SE or AE with SKSE and Address Library.
 - ENBSeries, for the shader-facing side.
+
+## Build
+
+A standard CommonLibSSE-NG plugin build through vcpkg:
+
+```
+cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=<vcpkg>/scripts/buildsystems/vcpkg.cmake
+cmake --build build --config Release
+```
+
+The `commonlibsse-ng` dependency resolves through the vcpkg manifest in this
+repository. The output is `SkyrimBridge.dll`, an SKSE plugin; install it to
+`Data/SKSE/Plugins/` together with `config/WeatherParams.ini` under
+`Data/SKSE/Plugins/SkyrimBridge/`.
+
+## Source layout
+
+| Path | Contents |
+|---|---|
+| `src/core/` | The measurement trackers (20 domains), the ENB SDK interface, compatibility detection, and the Papyrus bridge |
+| `src/` | Weather parameter computation, the shared-memory channel (`SkyrimBridge_GameState`), and the enbParmLink compatibility layer |
+| `shaders/` | The stable HLSL API for preset authors |
+| `docs/` | The parameter contract |
+
+There is no packaged release yet; the first release ships the built plugin.
+In-game validation of this standalone build is still ahead of it.
 
 ## License
 
