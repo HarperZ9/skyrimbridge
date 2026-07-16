@@ -27,6 +27,7 @@
 #include "ENBInterface.h"
 #include "CompatDetect.h"
 #include "PapyrusBridge.h"
+#include "WriteBackProcessor.h"
 
 // Individual tracker headers (Update() declarations)
 #include "../Trackers.h"
@@ -196,6 +197,15 @@ static void DoFrameUpdate()
 
     #undef SB_SAFE_UPDATE
 
+    // Runtime actuation: INI-driven write-back of game state (FOV, fog,
+    // sky lights, time) from measured data, fixed values, or live ENB
+    // parameters. Rules ship disabled; the user opts in per rule.
+    try {
+        SB::WriteBackProcessor::Get().Execute(data);
+    } catch (...) {
+        SKSE::log::error("SkyrimBridge: WriteBackProcessor threw");
+    }
+
     SanitizeAllData(data);
 
     // 1. ENB shader parameters (dirty-tracked push of the whole table)
@@ -311,6 +321,11 @@ static void OnMessage(SKSE::MessagingInterface::Message* a_msg)
 
         auto configDir = std::filesystem::path("Data/SKSE/Plugins/SkyrimBridge");
         SB::WeatherParameterComputer::Get().Initialize(configDir);
+
+        SB::WriteBackProcessor::Get().LoadConfig(configDir);
+        SKSE::log::info("SkyrimBridge: write-back rules loaded ({} rules, {} enabled)",
+            SB::WriteBackProcessor::Get().GetRuleCount(),
+            SB::WriteBackProcessor::Get().GetEnabledRuleCount());
 
         std::error_code ec;
         auto gameDir = std::filesystem::current_path(ec);

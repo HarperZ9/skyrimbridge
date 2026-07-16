@@ -31,6 +31,17 @@ name a piece of game state, a shader can read it.
 
 See [docs/parameters.md](docs/parameters.md) for the full parameter contract.
 
+## Runtime write-back
+
+Measurement is one direction; `WriteBackConfig.ini` is the other. Each rule
+maps a source (a measured `SB_*` field, a fixed value, or a **live ENB shader
+parameter**) through scale, offset, clamp, and temporal smoothing onto an
+engine target: camera FOV, fog planes, sun and ambient light color, actor
+values, timescale, game hour. Author a float in `enbeffect.fx`, name it in a
+rule, and ENB's editor becomes a real-time engine control. All targets are
+typed engine access, no raw addresses; every rule ships disabled until you
+enable it.
+
 ## Requirements
 
 - Skyrim SE or AE with SKSE and Address Library.

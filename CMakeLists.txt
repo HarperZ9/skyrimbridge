@@ -31,6 +31,7 @@ add_commonlibsse_plugin(
         src/core/ENBInterface.cpp
         src/core/CompatDetect.cpp
         src/core/PapyrusBridge.cpp
+        src/core/WriteBackProcessor.cpp
 
         # Core trackers (domains 1-10)
         src/core/CelestialTracker.cpp
@@ -89,5 +90,8 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/config/WeatherParams.ini"
         "$<TARGET_FILE_DIR:${PROJECT_NAME}>/config/WeatherParams.ini"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/config/WriteBackConfig.ini"
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/config/WriteBackConfig.ini"
     COMMENT "Copying config files to build directory"
 )
