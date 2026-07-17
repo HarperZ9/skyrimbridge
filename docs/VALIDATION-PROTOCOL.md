@@ -1,17 +1,16 @@
-# SkyrimBridge in-game validation protocol (gated features)
+# SkyrimBridge in-game validation (gated features)
 
-Every feature below ships OFF. This document is the acceptance procedure: the
-operator enables one feature at a time, runs the steps, records the result,
-and only then decides whether the default flips. Nothing here is validated
-until the operator says so; offline receipts (the `tests/` harnesses) cover
-the math and codecs, not live engine behavior.
+Every feature below ships OFF. This is the acceptance procedure for the
+features that change engine state: enable one at a time, run the steps,
+record the result, and only then decide whether to keep it on. The offline
+receipts (the `tests/` harnesses) cover the math and codecs; this covers the
+live engine behavior they cannot.
 
 **Paths**
-- Installed config: `E:\Modlists\SkyGroundChronicles\mods\SkyrimBridge\SKSE\Plugins\SkyrimBridge\SkyrimBridge.ini`
-  (and `Sky.ini` next to it). In-game these resolve under
-  `Data/SKSE/Plugins/SkyrimBridge/`.
+- Config: `Data/SKSE/Plugins/SkyrimBridge/SkyrimBridge.ini` (and `Sky.ini`
+  next to it), under your Skyrim `Data` folder or your mod manager's view of it.
 - Log: `Documents\My Games\Skyrim Special Edition\SKSE\SkyrimBridge.log`.
-- Configs load once at data-load: restart the game after every toggle change.
+- Configs load once at data load: restart the game after every toggle change.
 
 **General loop:** flip ONE toggle, start the game, grep the log for the init
 line, run the steps, record PASS/FAIL plus the observations listed, flip the
@@ -115,7 +114,7 @@ per-frame jitter), and the repositioned log line appears exactly once.
 proves neither).
 
 **Init behavior:** a background scan starts at data-load and logs when done:
-`TextureAutoConvert: scan done — N foreign, M converted, K already had .dds,
+`TextureAutoConvert: scan done: N foreign, M converted, K already had .dds,
 F failed`.
 
 **Steps:** first run: note the counts. The 2026-07-16 offline dry-run against
@@ -156,10 +155,10 @@ transcode line (cache hit). Restore the original `.dds` afterward.
 terminal on the same machine:
 
 ```
-python C:\dev\skyrimbridge\tools\sb_command_client.py ping
-python C:\dev\skyrimbridge\tools\sb_command_client.py reflect.list 0
-python C:\dev\skyrimbridge\tools\sb_command_client.py reflect.dump 0x10A241
-python C:\dev\skyrimbridge\tools\sb_command_client.py bogus.verb
+python tools\sb_command_client.py ping
+python tools\sb_command_client.py reflect.list 0
+python tools\sb_command_client.py reflect.dump 0x10A241
+python tools\sb_command_client.py bogus.verb
 ```
 
 **Pass:** `ping` returns status 0, resultInt 1, `pong`. `reflect.list 0`
@@ -292,7 +291,7 @@ save), pick 4-6 `coc` targets you know work in your modlist (test each in
 the console once), then:
 
 ```
-python C:\dev\skyrimbridge\tools\sb_smoke_tour.py --cells Riverwood WhiterunBanneredMare Solitude
+python tools\sb_smoke_tour.py --cells Riverwood WhiterunBanneredMare Solitude
 ```
 
 **Pass:** every stop lands (cell id changes), the per-stop census and VM
@@ -356,7 +355,7 @@ needs a fix); the geometry block itself is corpus-proven byte-exact.
 
 ## After a PASS
 
-Defaults stay OFF until the operator flips them. When one flips, change BOTH
+Defaults stay OFF until you flips them. When one flips, change BOTH
 copies of the config (the installed INI and `config/SkyrimBridge.ini` or
 `config/Sky.ini` in the repo) in the same commit, and note the validation
 date in the commit message. A FAIL goes back to OFF and the observations go

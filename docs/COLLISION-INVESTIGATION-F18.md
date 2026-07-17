@@ -79,7 +79,7 @@ most common on convex shapes; filter layer 1 (static) on true statics,
    root node's collisionRef; add `BSXFlags` with the havok bit as real
    statics carry.
 7. Surface as an option on ConvertModel/SpawnModel; OFF by default until
-   the operator walks against a generated hull in-game (scale and
+   the author walks against a generated hull in-game (scale and
    walkability are the acceptance test; finding 3's outliers show exactly
    what failure looks like).
 
@@ -89,5 +89,3 @@ collision (MOPP) remains out of scope. For props, rocks, furniture-scale
 statics, and anything a player mostly walks around rather than through,
 convex is the right 80 percent.
 
-Analysis scripts (session scratchpad, re-runnable): `survey_collision.py`,
-`parse_convex_collision.py`, `pin_scale_and_body.py`, `probe_outlier.py`.

@@ -93,5 +93,3 @@ meshes are a known layout; and MOPP, the hardest, turns out to be a free
 tool plus a byte-layout reversal we already know how to do. "Out of scope"
 meant "not yet, and here is exactly what it takes," not "cannot."
 
-Analysis scripts (session scratchpad): `investigate_listshape_mopp.py`,
-`parse_compressed_mesh.py`.

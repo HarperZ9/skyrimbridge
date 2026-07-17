@@ -1,128 +1,189 @@
 # SkyrimBridge
 
-Live game state for ENB shaders. SkyrimBridge publishes the engine's real-time
-data as ENB parameters every frame, so a preset can react not only to weather
-and time of day, but to what the player is actually doing.
+An SKSE plugin that opens the Skyrim engine to shaders, tools, and creators.
+It publishes live game state to ENB every frame, edits engine records while
+the game runs, imports foreign texture and model files into formats the game
+loads natively, generates collision, and exposes a diagnostics and automation
+channel that external tools can drive.
 
-Weather colors, sun and moon, fog, and camera are what other bridges give you.
-SkyrimBridge adds the rest: combat intensity, equipment, actor values and
-skills, damage and vision effects, interior state, and nearby lights. If you can
-name a piece of game state, a shader can read it.
+Built on CommonLibSSE-NG with version-independent addressing, so one build
+runs on Skyrim Special Edition, Anniversary Edition, and VR. Every write to
+the running engine is typed access through the game's own structures, never a
+raw memory poke, and the features that change engine state ship turned off
+until you enable them.
 
-## What you can build with it
+## What it does
 
-- Weather-reactive grading that matches the sky's real colors, interpolated
-  across the day the same way the engine does it.
-- Combat-reactive post: a vignette that tightens as a fight escalates, screen
-  response tied to damage taken.
-- Equipment- and skill-aware looks: effects that shift with what is worn or
-  which skills are in play.
-- Interior-aware exposure that knows it is indoors without guessing from depth.
-- External-app access to the same live data through a shared-memory channel.
+SkyrimBridge is several tools in one plugin. Use only the parts you need.
 
-## Three ways in
+**For ENB preset authors**
+- Publishes over 20 domains of live game state as ENB parameters every frame:
+  weather colors, sun and moon, fog, camera, combat intensity, equipment,
+  actor values and skills, damage and vision effects, interior state, nearby
+  lights, and more. A stable HLSL header (`shaders/SkyrimBridge.fxh`) is the
+  contract preset authors read.
+- A live weather workshop captures the active weather record, applies edits
+  back to the running game, and hot-reloads per-weather preset files while you
+  play. No editor, no restart.
+- Runtime write-back maps a measured value, a fixed number, or a live ENB
+  shader parameter onto an engine target (camera field of view, fog, light
+  color, actor values, timescale, game hour), so a slider in the ENB editor
+  can drive the engine in real time.
+- A GPU tier with a physically based atmosphere renderer and raymarched
+  volumetric clouds, for setups that chain a D3D11 proxy.
 
-1. **The plugin** publishes the data. Drop it in as an SKSE plugin.
-2. **The HLSL API** (`shaders/SkyrimBridge.fxh`) is the stable contract for
-   shader authors. Include it after ENB's built-in parameter block, read the
-   `SB_*` values, and call `SB_Retain(uv)` once so nothing dead-strips.
-3. **The shared-memory bridge** exposes the same frame data to external tools.
-   A drop-in `enbParmLink` compatibility layer is included for existing setups.
+**For record and worldspace editors**
+- EngineReflect reads any of 14 record types to a plain text file, lets you
+  edit it, and writes it back with a round-trip check: image spaces, weathers
+  (the full 487-field record), climates, lighting templates, water, effect
+  shaders, lights, regions, worldspaces, grass, land textures, trees, and
+  more. 827 fields in total, all named.
+- A native replacement suite for the third-party ENB plugins presets used to
+  depend on: per-worldspace weather routing, a celestial lighting model with
+  optional orbital sun, an inventory-light fix, and a recovered engine patch.
+  It uses its own flat INI files, with no external loader or config format.
 
-See [docs/parameters.md](docs/parameters.md) for the full parameter contract.
+**For texture and model creators**
+- A foreign texture pipeline: decode PNG, TGA, and BMP, and read and write DDS
+  in BC1, BC3, BC7, BC4, and BC5. It can transcode a whole texture tree at
+  load, or convert a missing DDS in flight and serve it through the engine's
+  own file stream. Mipmap generation includes an alpha coverage preserving
+  mode so foliage does not thin out at distance.
+- A foreign model pipeline: convert OBJ, glTF, and GLB static meshes to
+  Skyrim SE NIF, place them in the running game through the engine's own
+  loader, and paint procedural tree wind weights so a converted tree sways.
+- Collision generation: a convex hull, an approximate convex decomposition
+  for concave shapes, and exact mesh collision built from the reversed
+  compressed-mesh format, with selectable Havok materials so a snow prop
+  sounds like snow underfoot.
+- A Blender add-on that exports the selected mesh and drops it into the
+  running game with one click, over the command channel below.
 
-## The weather workshop
-
-The plugin carries a live weather editor: it captures the active weather
-record (all 17 color types across four times of day, fog planes and powers,
-wind, sun glare, cloud layers, directional ambient, the associated image
-space and volumetric lighting), applies edits back to the running game, and
-manages per-weather presets under
-`Data/SKSE/Plugins/SkyrimBridge/WeatherPresets/<EditorID>.ini`.
-
-The workshop loop needs no GUI:
-
-- **Auto-load**: when the game transitions to a weather that has a preset,
-  the preset applies automatically.
-- **Hot-reload**: edit the preset INI in any text editor while the game
-  runs; the change lands within a second. Presets overlay the live record,
-  so a preset carrying only `[Colors]` leaves everything else untouched.
-- **Console**: `cgf "SkyrimBridge.CaptureWeather"`, `SaveWeatherPreset`,
-  `LoadWeatherPreset`, `RevertWeather`, `SetWeatherCompare` (A/B against
-  the original), `ForceWeatherByID`, `ClearForcedWeather`.
-
-The offline half of the workshop is
-[elder-weathers](https://github.com/HarperZ9/elder-weathers): its atmosphere
-model authors complete weather plugins and exports presets in this same
-dialect, so model-authored weathers can be tuned live and live tunings can
-be compared back against the model.
-
-## Runtime write-back
-
-Measurement is one direction; `WriteBackConfig.ini` is the other. Each rule
-maps a source (a measured `SB_*` field, a fixed value, or a **live ENB shader
-parameter**) through scale, offset, clamp, and temporal smoothing onto an
-engine target: camera FOV, fog planes, sun and ambient light color, actor
-values, timescale, game hour. Author a float in `enbeffect.fx`, name it in a
-rule, and ENB's editor becomes a real-time engine control. All targets are
-typed engine access, no raw addresses; every rule ships disabled until you
-enable it.
-
-## The GPU tier
-
-Beyond measurement and write-back, the plugin carries a GPU rendering tier:
-a compute infrastructure (shader compilation, dispatch, render-pass
-orchestration, Hi-Z depth pyramid), a physically-based atmosphere renderer
-(Rayleigh and Mie scattering LUTs), and raymarched volumetric clouds.
-Configure it in `config/GPU.ini`; volumetric clouds compile their shaders in
-the background after data load and are off by default.
-
-Two modes, auto-detected:
-
-- **Proxy mode**: the bundled d3d11 proxy is loaded, either directly as the
-  game's `d3d11.dll` or chain-loaded through ENB's `[PROXY] ProxyLibrary`
-  setting. Full mid-frame injection: depth and G-buffer access, the Hi-Z
-  pyramid builds, clouds render into the scene.
-- **Legacy mode** (plain ENB, no proxy): the tier initializes and its compute
-  work runs at present time, but mid-frame passes (clouds, Hi-Z) stay dormant
-  because the injection points require the proxy. Useful for profiling and
-  capture; not yet a visual path.
-
-In-game isolation hotkeys: F7 mid-frame dispatch, F8 compute and trackers,
-F9 render passes, F10 frame capture (600 frames), F11 GPU profiler.
+**For power users and troubleshooters**
+- A cell performance census names the shadow-casting lights in your current
+  cell, ranked by distance, with the plugin that placed each one. The manual
+  hunt for a frame-rate sink becomes one command.
+- A live Papyrus virtual machine monitor reports script load while the game
+  runs: the function-message queue depth, running and frozen stacks, which
+  scripts are executing right now, and the per-script instance census.
+- A command channel over shared memory lets an external tool drive the engine
+  surface without the console. A command-line client, the Blender add-on, and
+  a modlist smoke-tour tester all speak it.
 
 ## Requirements
 
-- Skyrim SE or AE with SKSE and Address Library.
-- ENBSeries, for the shader-facing side.
+- Skyrim Special Edition, Anniversary Edition, or VR
+- [SKSE64](https://skse.silverlock.org/) (or SKSEVR)
+- [Address Library for SKSE Plugins](https://www.nexusmods.com/skyrimspecialedition/mods/32444)
+- [ENBSeries](http://enbdev.com/), for the shader-facing features only
+- [ConsoleUtilSSE](https://www.nexusmods.com/skyrimspecialedition/mods/76649),
+  optional, for calling the console functions with `cgf`
 
-## Build
+The record editing, texture, model, collision, and diagnostics features do
+not require ENB. The ENB parameter publishing and the shader-facing write-back
+do.
+
+## Installation
+
+Install it like any SKSE plugin. A mod manager is recommended.
+
+**With a mod manager (Mod Organizer 2 or Vortex)**
+1. Download the release archive.
+2. Install it in your mod manager and enable it, the same as any other mod.
+3. Make sure SKSE, Address Library, and (for the shader features) ENBSeries
+   are installed and enabled.
+4. Launch through SKSE.
+
+**Manual install**
+1. Extract the archive into your Skyrim `Data` folder, so that the plugin
+   lands at `Data/SKSE/Plugins/SkyrimBridge.dll` and its config files land in
+   `Data/SKSE/Plugins/SkyrimBridge/`.
+2. Launch through SKSE.
+
+**The GPU tier (optional)**
+The atmosphere and cloud renderer needs the bundled `d3d11.dll` proxy. Place
+it next to `SkyrimSE.exe`, or chain it through ENB by setting
+`ProxyLibrary` in the `[PROXY]` section of `enblocal.ini`. Without the proxy
+the GPU tier stays dormant and the rest of the plugin works normally. See
+[docs/GPU.md](docs/GPU.md).
+
+**Verify it loaded**
+After a launch, check for `SkyrimBridge.log` in
+`Documents/My Games/Skyrim Special Edition/SKSE/`. The first lines report the
+plugin version and the features that initialized.
+
+## First steps
+
+- ENB preset authors: read [docs/parameters.md](docs/parameters.md) for the
+  parameter contract, then include `shaders/SkyrimBridge.fxh` in your effect
+  file.
+- Everyone else: the full feature reference, with every console command,
+  config key, and command-channel verb, is in
+  [docs/USER-GUIDE.md](docs/USER-GUIDE.md). The technical specification is in
+  [docs/SPEC-ENGINE-EXPOSURE.md](docs/SPEC-ENGINE-EXPOSURE.md).
+
+Everything that writes to the running engine ships disabled. You turn on each
+feature deliberately, in its config file or with a console command, after
+reading what it does.
+
+## Configuration
+
+The plugin reads plain INI files from `Data/SKSE/Plugins/SkyrimBridge/`:
+
+| File | Controls |
+|---|---|
+| `SkyrimBridge.ini` | The native ENB-plugin replacements and the texture and command-channel features |
+| `Sky.ini` | The celestial lighting model and orbital sun |
+| `WeatherParams.ini` | The weather parameter mapping published to ENB |
+| `WriteBackConfig.ini` | The write-back rules from parameters to engine targets |
+| `GPU.ini` | The GPU rendering tier |
+| `WeatherRouting.ini` | Per-worldspace weather lists (an example is shipped) |
+
+Each file is commented, and every feature that changes engine state defaults
+to off.
+
+## Building from source
 
 A standard CommonLibSSE-NG plugin build through vcpkg:
 
 ```
-cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=<vcpkg>/scripts/buildsystems/vcpkg.cmake
+cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=<path-to-vcpkg>/scripts/buildsystems/vcpkg.cmake
 cmake --build build --config Release
 ```
 
-The `commonlibsse-ng` dependency resolves through the vcpkg manifest in this
-repository. The output is `SkyrimBridge.dll`, an SKSE plugin; install it to
-`Data/SKSE/Plugins/` together with `config/WeatherParams.ini` under
-`Data/SKSE/Plugins/SkyrimBridge/`.
+The `commonlibsse-ng` dependency resolves through the vcpkg manifest
+(`vcpkg.json`) in this repository. The output is `SkyrimBridge.dll`. The
+optional D3D11 proxy builds as `d3d11.dll` from the same tree.
 
-## Source layout
+## Repository layout
 
 | Path | Contents |
 |---|---|
-| `src/core/` | The measurement trackers (20 domains), the ENB SDK interface, compatibility detection, and the Papyrus bridge |
-| `src/` | Weather parameter computation, the shared-memory channel (`SkyrimBridge_GameState`), and the enbParmLink compatibility layer |
-| `shaders/` | The stable HLSL API for preset authors |
-| `docs/` | The parameter contract |
+| `src/core/` | The plugin: trackers, engine access, the texture, model, collision, and codec modules, and the Papyrus bridge |
+| `src/` | Weather parameter computation, the shared-memory channel, and the enbParmLink compatibility layer |
+| `src/d3d11_proxy/` | The standalone D3D11 proxy for the GPU tier |
+| `shaders/` | The stable HLSL headers for preset authors |
+| `config/` | The default configuration files |
+| `docs/` | User guide, parameter contract, and technical specifications |
+| `tools/` | The Blender add-on, the command-line client, and the smoke-tour tester |
+| `tests/` | Offline validation harnesses for the codecs and formats |
 
-There is no packaged release yet; the first release ships the built plugin.
-In-game validation of this standalone build is still ahead of it.
+## Verification
+
+The file-format and codec work is validated offline against real game assets,
+with 17 re-runnable harnesses in `tests/`. Each checks its output against an
+independent decoder or against the game's own files. The features that write
+to the running engine are validated in-game; the acceptance steps are in
+[docs/VALIDATION-PROTOCOL.md](docs/VALIDATION-PROTOCOL.md).
 
 ## License
 
-MIT. Copyright 2026 Zain Dana Harper. Use it, ship presets on it, build tools
-against the shared-memory channel.
+MIT. Copyright 2026 Zain Dana Harper. Use it, ship presets and tools on it,
+and build against the command channel and the HLSL contract.
+
+## Credits
+
+Built on [CommonLibSSE-NG](https://github.com/CharmedBaryon/CommonLibSSE-NG).
+The BC7 texture tables are extracted from Microsoft DirectXTex (MIT). The
+weather and record work builds on the collective reverse-engineering of the
+Skyrim modding community.

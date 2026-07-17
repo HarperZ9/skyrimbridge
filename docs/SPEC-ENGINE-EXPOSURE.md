@@ -77,10 +77,10 @@ Regions keep their interesting state in polymorphic `TESRegionData`
 subrecords, which a flat schema cannot express. The walker dumps every
 subrecord CommonLib types:
 
-- **Weather** — the region weather list: `WeatherChance<i> = <weather>, <chance>, <global>`
-- **Sound** — music link + `Sound<i> = <sound>, <flags>, <chance>`
-- **Map** — map name
-- **Land** — icon texture
+- **Weather**: the region weather list: `WeatherChance<i> = <weather>, <chance>, <global>`
+- **Sound**: music link + `Sound<i> = <sound>, <flags>, <chance>`
+- **Map**: map name
+- **Land**: icon texture
 - Objects, Grass, Imposter are listed by type and priority only: CommonLib has
   no layout for them, and this spec does not pretend otherwise.
 
@@ -143,11 +143,11 @@ cgf "SkyrimBridge.TextureScanNow" true                      ; dry-run the tree s
 
 ### Automatic integration (both `[Native]`-gated, ship OFF)
 
-- **TextureAutoConvert** — background scan at data-load: every
+- **TextureAutoConvert**: background scan at data-load: every
   `textures\*.png/.tga/.bmp` without a `.dds` sibling is transcoded next to it
   (additive; an existing `.dds` is never overwritten unless
   `[TextureConvert] Refresh` and the source is newer).
-- **TextureLoadHook** — in-flight substitution. Vtable detours over
+- **TextureLoadHook**: in-flight substitution. Vtable detours over
   `BSResource::LooseFileLocation`'s stream/async/info functions: a missing
   `textures\*.dds` whose foreign sibling exists is transcoded once into
   `SkyrimBridge/texcache/` and the original engine function is re-invoked on
@@ -158,54 +158,54 @@ cgf "SkyrimBridge.TextureScanNow" true                      ; dry-run the tree s
 
 ### Validation receipts (in-repo, re-runnable)
 
-- `tests/validate_png_codec.py` — 77 checks. Inflate byte-exact vs zlib on
+- `tests/validate_png_codec.py`: 77 checks. Inflate byte-exact vs zlib on
   real ENB IDAT streams (incl. a 33.7 MB stream) and synthetic
   stored/fixed/dynamic blocks; PNG pixel-exact vs PIL on 40 real ENB PNGs plus
   synthetic and hand-built Adam7/16-bit/colorkey cases; DDS mip structure and
   box-filter math; checksums vs binascii.
-- `tests/validate_bcn_codec.py` — 25 checks. BC decode exact vs PIL on
+- `tests/validate_bcn_codec.py`: 25 checks. BC decode exact vs PIL on
   hand-built blocks (every mode) and real modlist DXT1/DXT5 textures; encode
   output decodes identically under PIL and our model; PSNR floor; lossless
   round-trip on exactly-representable blocks; TGA layout via PIL read-back.
-- `tests/validate_texture_info.py` — 6 checks. The header-only inspector
+- `tests/validate_texture_info.py`: 6 checks. The header-only inspector
   against known-by-construction files: PIL PNG (independent writer), legacy
   DXT5 and DX10 BC7 DDS containers, TGA, BMP, and an unknown-content
   refusal.
-- `tests/validate_collision_material.py` — 9 checks. The shipped material
+- `tests/validate_collision_material.py`: 9 checks. The shipped material
   table parsed from CollisionMaterial.cpp and compared to the authoritative
   niftools nif.xml enum (locks 0x1DD9C611 as WOOD, not the earlier STONE
   mislabel; STONE 0xDF02F237, SNOW 0x17C77AAF distinct), plus material
   propagation into an emitted list+convex chain (snow reaches the list shape
   and every convex child).
-- `tests/validate_convex_decompose.py` — 18 checks. The decomposer on a
+- `tests/validate_convex_decompose.py`: 18 checks. The decomposer on a
   concave L-solid (union covers every input point with no gaps; phantom
   notch collision cut 0.44 -> 0.08 vs a single hull; full true-solid
   coverage kept; deterministic; small-input fallback), and the bhkListShape
   container round-trip (numSub/refs/material/two cinfo/numInts/filters,
   36+8N, chain refs) via a ported writer and the F18 parser.
-- `tests/validate_collision_gen.py` — 19 checks. Quickhull held to the hull
+- `tests/validate_collision_gen.py`: 19 checks. Quickhull held to the hull
   properties directly (containment, subset, unit planes, face support,
   volume, exact cube/octahedron answers, determinism, degenerate refusals);
   the 250-byte rigid-body template re-derived from its donor NIF and
   compared byte-for-byte to the shipped source; a ported-writer container
   round-trip (chain refs, template patch, Havok scale, BSXFlags).
-- `tests/validate_tree_wind.py` — 22 checks. The empirical mapping asserted
+- `tests/validate_tree_wind.py`: 22 checks. The empirical mapping asserted
   on real animated trees (grayscale weights in [127,255], rising with
   distance from base, Tree_Anim bit 29, constant per-shape alpha,
   BSLeafAnimNode roots, vanilla's all-255 minimal config), plus the
   generator port (monotone, 128..255, deterministic) and source-consistency
   checks that the shipped ModelCodec.cpp carries exactly the derived values.
-- `tests/validate_foliage_mips.py` — 10 checks. Demonstrates the defect first
+- `tests/validate_foliage_mips.py`: 10 checks. Demonstrates the defect first
   (box-filter mips collapse a sparse synthetic foliage's alpha-test coverage
   to 0.000, and real modlist foliage decays measurably), then proves the fix:
   every mip holds the top level's coverage within quantization tolerance,
   never thinner, deterministic, opaque/transparent edge cases pass through,
   and the property survives BC3 alpha quantization (the shipping format).
-- `tests/validate_bc45_codec.py` — 11 checks. BC4 decode byte-exact vs PIL
+- `tests/validate_bc45_codec.py`: 11 checks. BC4 decode byte-exact vs PIL
   on 64 random blocks and 5 real modlist BC4 masks; BC5 vs by-construction
   ground truth; encode round-trip (46 dB, flat lossless); source
   consistency (fourCC + DX10 dxgi recognition, two-channel encode).
-- `tests/validate_bc7_codec.py` — 92 checks. The partition/anchor tables are
+- `tests/validate_bc7_codec.py`: 92 checks. The partition/anchor tables are
   parsed out of the shipped TextureBC7.cpp at run time, so the compiled data
   is what gets verified. Per-mode random-block fuzz (all 8 modes) byte-exact
   vs PIL; 70+ real modlist BC7 textures byte-exact vs PIL; DX10-rewrapped
@@ -320,11 +320,11 @@ Console form: `cgf "SkyrimBridge.<name>" <args...>`
 **EngineReflect**
 | Native | Signature |
 |---|---|
-| EngineReflectDump | `string (int formID)` — dump path, `""` on failure |
-| EngineReflectApply | `int (int formID)` — fields written |
-| EngineReflectVerify | `int (int formID)` — fields on success, 0 on failure |
-| EngineReflectVerifyStrict | `int (int formID)` — MUTATES (write-back witness) |
-| EngineReflectList | `int (int formID)` — 0 = schemas; else that form's fields |
+| EngineReflectDump | `string (int formID)`: dump path, `""` on failure |
+| EngineReflectApply | `int (int formID)`: fields written |
+| EngineReflectVerify | `int (int formID)`: fields on success, 0 on failure |
+| EngineReflectVerifyStrict | `int (int formID)`: MUTATES (write-back witness) |
+| EngineReflectList | `int (int formID)`: 0 = schemas; else that form's fields |
 
 **RegionWalker**
 | Native | Signature |
@@ -337,27 +337,27 @@ Console form: `cgf "SkyrimBridge.<name>" <args...>`
 | Native | Signature |
 |---|---|
 | ConvertTexture | `bool (string in, string out)` |
-| ConvertTextureFmt | `bool (string in, string out, string fmt)` — fmt BC1/BC3/BC4/BC5/BC7/RGBA8 |
-| ConvertTextureFoliage | `bool (string in, string out, string fmt, int threshold)` — coverage-preserving mips (BC3/BC7/RGBA8) |
-| TextureScanNow | `int (bool dryRun)` — converted (or would-convert) count |
+| ConvertTextureFmt | `bool (string in, string out, string fmt)`: fmt BC1/BC3/BC4/BC5/BC7/RGBA8 |
+| ConvertTextureFoliage | `bool (string in, string out, string fmt, int threshold)`: coverage-preserving mips (BC3/BC7/RGBA8) |
+| TextureScanNow | `int (bool dryRun)`: converted (or would-convert) count |
 
 **ModelCodec**
 | Native | Signature |
 |---|---|
-| ConvertModel | `bool (string in, string out)` — OBJ/glTF/GLB in, NIF out |
-| ConvertModelTree | `bool (string in, string out)` — tree mode: wind vertex colors + Tree_Anim + BSLeafAnimNode root |
-| ConvertModelEx | `bool (string in, string out, bool tree, bool collision, int pieces, string material)` — pieces >= 2 = decomposed bhkListShape; material = SkyrimHavokMaterial name (snow/stone/wood/ice/...) |
-| MaterialHash | `int (string name)` — resolve a SkyrimHavokMaterial name to its hash (0 = unknown) |
-| ConvertModelMeshCollision | `bool (string in, string out, string material)` — exact concave (mesh) collision, file output; emits a bhkCompressedMeshShape chain with an EMPTY MOPP. Finalize in NifSkope "Update MOPP Code" before in-game use |
-| SpawnModel | `int (string in)` — convert + place at the player via the engine loader; returns the ref's FormID (MUTATES the save) |
+| ConvertModel | `bool (string in, string out)`: OBJ/glTF/GLB in, NIF out |
+| ConvertModelTree | `bool (string in, string out)`: tree mode: wind vertex colors + Tree_Anim + BSLeafAnimNode root |
+| ConvertModelEx | `bool (string in, string out, bool tree, bool collision, int pieces, string material)`: pieces >= 2 = decomposed bhkListShape; material = SkyrimHavokMaterial name (snow/stone/wood/ice/...) |
+| MaterialHash | `int (string name)`: resolve a SkyrimHavokMaterial name to its hash (0 = unknown) |
+| ConvertModelMeshCollision | `bool (string in, string out, string material)`: exact concave (mesh) collision, file output; emits a bhkCompressedMeshShape chain with an EMPTY MOPP. Finalize in NifSkope "Update MOPP Code" before in-game use |
+| SpawnModel | `int (string in)`: convert + place at the player via the engine loader; returns the ref's FormID (MUTATES the save) |
 
 **Diagnostics**
 | Native | Signature |
 |---|---|
-| CellReport | `int (())` — read-only census of the player's cell: refs by type, shadow-casting lights (nearest first, plugin-attributed), refs per winning plugin; full text to `dumps/cellreport.txt`; returns the shadow-light count |
-| ScriptReport | `bool (())` — live Papyrus VM monitor: overstress flag, function-message queue depth, running/latent/frozen stacks, executing script classes, per-class instance census; runs next frame (a native must not take the VM's locks); full text to `dumps/scriptreport.txt` |
-| FormChain | `string (int formID)` — the form's plugin override chain, oldest first, winner last ("which mod won", scriptable, any form) |
-| TextureInfo | `string (string path)` — header-only texture inspection: container, format, dimensions, mips / depth / bpp |
+| CellReport | `int (())`: read-only census of the player's cell: refs by type, shadow-casting lights (nearest first, plugin-attributed), refs per winning plugin; full text to `dumps/cellreport.txt`; returns the shadow-light count |
+| ScriptReport | `bool (())`: live Papyrus VM monitor: overstress flag, function-message queue depth, running/latent/frozen stacks, executing script classes, per-class instance census; runs next frame (a native must not take the VM's locks); full text to `dumps/scriptreport.txt` |
+| FormChain | `string (int formID)`: the form's plugin override chain, oldest first, winner last ("which mod won", scriptable, any form) |
+| TextureInfo | `string (string path)`: header-only texture inspection: container, format, dimensions, mips / depth / bpp |
 
 ---
 
@@ -404,7 +404,7 @@ the mailbox carries the trigger and a bounded 4 KiB text result.
 **Verb table**
 | Verb | Request | Response |
 |---|---|---|
-| `ping` | — | `resultInt` = 1, `"pong"` |
+| `ping` | (none) | `resultInt` = 1, `"pong"` |
 | `reflect.list` | `arg0` = `"0"` or `"0x<formid>"` | schema or field listing |
 | `reflect.dump` | `arg0` = `"0x<formid>"` | INI text (also written to `dumps/<id>.ini`), `resultInt` = lines |
 | `reflect.apply` | `arg0` = `"0x<formid>"`; client edits `dumps/<id>.ini` first | `resultInt` = fields written |
@@ -412,9 +412,9 @@ the mailbox carries the trigger and a bounded 4 KiB text result.
 | `reflect.chain` | `arg0` = `"0x<formid>"` | plugin override chain, oldest first, winner last |
 | `texture.info` | `arg0` = path | header-only texture description |
 | `region.dump` | `arg0` = `"0x<region>"` | subrecord dump (also `dumps/<id>.region.ini`) |
-| `cell.report` | — | performance census of the player's cell (shadow lights, refs by type/plugin); full text in `dumps/cellreport.txt` |
-| `script.report` | — | live Papyrus VM monitor (overstress, queue depth, stacks, class census); full text in `dumps/scriptreport.txt` |
-| `game.status` | — | heartbeat: `resultInt` = current cell FormID (0 = menu/loading), text = cell/pos/hour |
+| `cell.report` | (none) | performance census of the player's cell (shadow lights, refs by type/plugin); full text in `dumps/cellreport.txt` |
+| `script.report` | (none) | live Papyrus VM monitor (overstress, queue depth, stacks, class census); full text in `dumps/scriptreport.txt` |
+| `game.status` | (none) | heartbeat: `resultInt` = current cell FormID (0 = menu/loading), text = cell/pos/hour |
 | `game.coc` | `arg0` = cell editor id | console `coc` teleport. MUTATES game state (smoke-tour driver; disposable saves) |
 | `region.weather` | `arg0` = region, `arg1` = weather, `argInt` = chance | `resultInt` = entries edited |
 | `texture.convert` | `arg0` = in, `arg1` = out, `argInt` = 0/1/2/3 (RGBA8/BC1/BC3/BC7) | `resultInt` = ok |

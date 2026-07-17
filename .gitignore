@@ -4,3 +4,5 @@ vcpkg_installed/
 .vs/
 *.user
 __pycache__/
+.ruff_cache/
+dist/
