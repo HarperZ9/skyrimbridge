@@ -129,9 +129,10 @@ losslessness witness). Built on CommonLib RE:: layouts + the OFFSET-SPEC.
 Nothing re-derived from the DRM'd exe.
 - `Value` (Float / Int / Bool / Color3 / Color4 / FormLink / String), `Field`
   (name + kind + std::function get/set), `Schema` (per FormType), registry.
-- **Twelve schemas registered (799 fields):** ImageSpace, Volumetric, LightingTemplate,
+- **Fourteen schemas registered (827 fields):** ImageSpace, Volumetric, LightingTemplate,
   **Weather (full 487-field record)**, Climate, Region, Light, Water (full
-  DNAM shader block), EffectShader, ImageSpaceModifier, WorldSpace, Grass. Adding a
+  DNAM shader block), EffectShader, ImageSpaceModifier, WorldSpace, Grass,
+  LandTexture, Tree (OBJ_TREE SpeedTree sway params). Adding a
   record type is one schema block; the macros (RF_F/RF_INT/RF_B/RF_FLAGS/RF_S/
   RF_LINK/RF_C3F/RF_C3B) and the Weather-style programmatic builder handle
   scalars, links, strings, and indexed arrays. Honest exclusions are named in
@@ -532,6 +533,17 @@ category table: `docs/PAIN-POINTS-ASSESSMENT-2026-07.md`. Build order:
     finalize + walk-test (protocol section 13). We now emit the hard geometry
     the community's tools could never generate openly; NifSkope adds MOPP
     one-click.
+29. **Tree animation, two systems (clarified 2026-07-17).** Skyrim has two:
+    (a) SpeedTree, the TREE form with OBJ_TREE/CNAM sway params + BaseTreeData
+    branch bones, and (b) the Tree_Anim shader (BSLeafAnimNode + vertex-color
+    weights), which ModelCodec's tree mode (F16) targets and which sways on a
+    STAT via the shader, no form needed. The OBJ_TREE sway params are now a
+    reflection schema (Tree, 14 fields) for tuning existing SpeedTrees'
+    bend. TREE-form SPAWN of a converted mesh is NOT the fix for shader-sway
+    (wrong system) and would need generated BaseTreeData bones (a real R&D
+    lane, not built); if a Tree_Anim STAT does not sway in-game the lever is
+    the shader/global wind, not the form. Honest bound, no risky feature
+    shipped.
 28. ~~Multi-chunk CMSD for larger meshes~~ DONE 2026-07-17: the
     bhkCompressedMeshShapeData builder no longer caps at 65.535 units. A mesh
     is split into chunks by triangle centroid on a 48-unit grid, each chunk

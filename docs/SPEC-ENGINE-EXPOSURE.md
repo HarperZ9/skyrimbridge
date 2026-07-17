@@ -30,7 +30,7 @@ Value kinds: `float`, `int`, `bool`, `color3`, `color4`, `formlink`, `string`.
 Form links resolve through `TESForm::LookupByID` on write; an unresolvable ID
 is a no-op, never a wild pointer.
 
-### Registered schemas (813 fields total)
+### Registered schemas (827 fields total)
 
 | Schema | Form type | Fields | Covers / notable exclusions |
 |---|---|---|---|
@@ -47,6 +47,7 @@ is a no-op, never a wild pointer.
 | WorldSpace | WRLD | 31 | climate/water/lighting/music links, map framing, land/water heights, textures; runtime containers (cell maps) excluded by design |
 | Grass | GRAS | 11 | model path + full DATA block: density, slopes, water distance/state, position/height/color ranges, wave period, flags. Placement (which land textures grow it) lives on LandTexture |
 | LandTexture | LTEX | 14 | texture set/material links, havok friction/restitution, specular, shader index, and the GNAM grass list as bounded slots Grass0..Grass7 (writes replace existing entries only; writing 0 is a no-op, no list surgery). Closes the grass loop with GRAS |
+| Tree | TREE | 14 | model + the OBJ_TREE/CNAM SpeedTree sway parameters (trunk/branch/leaf flexibility, front/back/side amplitude + frequency, leaf amplitude/frequency) + tree type. Tunes how a TREE-form tree bends in wind. Distinct from the Tree_Anim shader sway ModelCodec tree mode paints (vertex-color weights on a STAT) |
 
 Adding a record type is one schema block using the field macros
 (`RF_F`, `RF_INT`, `RF_B`, `RF_FLAGS`, `RF_S`, `RF_LINK`, `RF_C3F`, `RF_C3B`)

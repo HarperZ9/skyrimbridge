@@ -700,6 +700,27 @@ namespace SB::Reflect
             RF_FLAGS(TESGrass, "Flags", data.flags, RE::TESGrass::GRASS_DATA::Flag),
         }});
 
+        // Tree (OBJ_TREE / CNAM): the SpeedTree sway parameters. Tuning these
+        // adjusts how a TREE-form tree bends in wind. (Distinct from the
+        // Tree_Anim shader system that ModelCodec's tree mode targets, which
+        // sways via vertex-color weights on a STAT; see docs.)
+        R.push_back(Schema{ "Tree", RE::TESObjectTREE::FORMTYPE, {
+            RF_S(TESObjectTREE, "Model", model),
+            RF_F(TESObjectTREE, "TrunkFlexibility", data.trunkFlexibility),
+            RF_F(TESObjectTREE, "BranchFlexibility", data.branchFlexibility),
+            RF_F(TESObjectTREE, "TrunkAmplitude", data.trunkAmplitude),
+            RF_F(TESObjectTREE, "FrontAmplitude", data.frontAmplitude),
+            RF_F(TESObjectTREE, "BackAmplitude", data.backAmplitude),
+            RF_F(TESObjectTREE, "SideAmplitude", data.sideAmplitude),
+            RF_F(TESObjectTREE, "FrontFrequency", data.frontFrequency),
+            RF_F(TESObjectTREE, "BackFrequency", data.backFrequency),
+            RF_F(TESObjectTREE, "SideFrequency", data.sideFrequency),
+            RF_F(TESObjectTREE, "LeafFlexibility", data.leafFlexibility),
+            RF_F(TESObjectTREE, "LeafAmplitude", data.leafAmplitude),
+            RF_F(TESObjectTREE, "LeafFrequency", data.leafFrequency),
+            RF_FLAGS(TESObjectTREE, "TreeType", type, RE::TESObjectTREE::etTreeType),
+        }});
+
         SKSE::log::info("EngineReflect: {} schemas registered", R.size());
     }
 
