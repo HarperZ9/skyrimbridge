@@ -500,8 +500,10 @@ namespace SB::PapyrusBridge
         if (_stricmp(a_fmt.c_str(), "BC1") == 0)      fmt = TexCodec::DDSFormat::BC1;
         else if (_stricmp(a_fmt.c_str(), "BC3") == 0) fmt = TexCodec::DDSFormat::BC3;
         else if (_stricmp(a_fmt.c_str(), "BC7") == 0) fmt = TexCodec::DDSFormat::BC7;
+        else if (_stricmp(a_fmt.c_str(), "BC4") == 0) fmt = TexCodec::DDSFormat::BC4;   // 1 channel (mask/height)
+        else if (_stricmp(a_fmt.c_str(), "BC5") == 0) fmt = TexCodec::DDSFormat::BC5;   // 2 channel (normal XY)
         else if (_stricmp(a_fmt.c_str(), "RGBA8") != 0) {
-            SKSE::log::warn("TextureCodec: unknown format '{}' (BC1/BC3/BC7/RGBA8)", a_fmt.c_str());
+            SKSE::log::warn("TextureCodec: unknown format '{}' (BC1/BC3/BC4/BC5/BC7/RGBA8)", a_fmt.c_str());
             return false;
         }
         bool ok = TexCodec::Convert(a_in.c_str(), a_out.c_str(), fmt);

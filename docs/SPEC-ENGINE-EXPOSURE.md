@@ -110,7 +110,9 @@ cgf "SkyrimBridge.RegionApply" 0x<region>                    ; chance edits from
 | DDS BC3/DXT5 | yes | yes | decode honors the always-4-color rule; encode carries alpha. Legacy or DX10 header |
 | DDS BC7 (DX10) | yes | yes | decode: all 8 modes per the D3D11 spec (tables machine-extracted from DirectXTex); encode: mode 6 baseline, DX10 header |
 | DDS DX10 RGBA8/BGRA8 | yes | no | byte-order formats (dxgi 28/29, 87/91) |
-| DDS BC4 / BC5 / BC6H / cubemaps / volumes / arrays | no | no | honest nulls; sRGB payloads pass through unconverted |
+| DDS BC4 / ATI1 | yes | yes | single channel (masks, height). Decode grayscale, PIL-exact on real modlist files; encode from R. Legacy fourCC or DX10 (dxgi 80-82) |
+| DDS BC5 / ATI2 | yes | yes | two channel (normal XY). Decode R,G with B=0; encode from R,G. Legacy fourCC or DX10 (dxgi 83-85) |
+| DDS BC6H / cubemaps / volumes / arrays | no | no | honest nulls; sRGB payloads pass through unconverted |
 
 DDS read decodes the top mip. DDS write appends an optional clamp-edge 2x2
 box-filter mip chain down to 1x1 (default on in the conversion natives).
@@ -198,6 +200,10 @@ cgf "SkyrimBridge.TextureScanNow" true                      ; dry-run the tree s
   every mip holds the top level's coverage within quantization tolerance,
   never thinner, deterministic, opaque/transparent edge cases pass through,
   and the property survives BC3 alpha quantization (the shipping format).
+- `tests/validate_bc45_codec.py` — 11 checks. BC4 decode byte-exact vs PIL
+  on 64 random blocks and 5 real modlist BC4 masks; BC5 vs by-construction
+  ground truth; encode round-trip (46 dB, flat lossless); source
+  consistency (fourCC + DX10 dxgi recognition, two-channel encode).
 - `tests/validate_bc7_codec.py` — 92 checks. The partition/anchor tables are
   parsed out of the shipped TextureBC7.cpp at run time, so the compiled data
   is what gets verified. Per-mode random-block fuzz (all 8 modes) byte-exact
@@ -330,7 +336,7 @@ Console form: `cgf "SkyrimBridge.<name>" <args...>`
 | Native | Signature |
 |---|---|
 | ConvertTexture | `bool (string in, string out)` |
-| ConvertTextureFmt | `bool (string in, string out, string fmt)` |
+| ConvertTextureFmt | `bool (string in, string out, string fmt)` — fmt BC1/BC3/BC4/BC5/BC7/RGBA8 |
 | ConvertTextureFoliage | `bool (string in, string out, string fmt, int threshold)` — coverage-preserving mips (BC3/BC7/RGBA8) |
 | TextureScanNow | `int (bool dryRun)` — converted (or would-convert) count |
 

@@ -56,7 +56,7 @@ namespace SB::TexCodec
         bool          valid = false;
     };
 
-    enum class DDSFormat { RGBA8, BC1, BC3, BC7 };
+    enum class DDSFormat { RGBA8, BC1, BC3, BC7, BC4, BC5 };
 
     Format DetectFormat(const std::uint8_t* data, std::size_t len);   // by magic bytes
     Format DetectFromPath(std::string_view path);                     // by extension
