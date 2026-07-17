@@ -533,6 +533,15 @@ category table: `docs/PAIN-POINTS-ASSESSMENT-2026-07.md`. Build order:
     finalize + walk-test (protocol section 13). We now emit the hard geometry
     the community's tools could never generate openly; NifSkope adds MOPP
     one-click.
+30. **Skinned meshes bounded (2026-07-17, `docs/SKINNED-MESH-BOUND.md`).**
+    Survey of 300 real skinned NIFs: the skin chain is four interlocking
+    blocks (NiSkinInstance/BSDismemberSkinInstance, NiSkinData,
+    NiSkinPartition) plus a skinned vertex stream. Layout-recoverable, but
+    two things make it a real R&D lane unlike the static/texture/collision
+    work: a source must be rigged to Skyrim's EXACT skeleton (generic glTF
+    rigs do not map; retargeting is its own problem), and the only
+    correctness oracle is in-game deformation on an animated actor. Deferred
+    with the requirements documented; not built.
 29. **Tree animation, two systems (clarified 2026-07-17).** Skyrim has two:
     (a) SpeedTree, the TREE form with OBJ_TREE/CNAM sway params + BaseTreeData
     branch bones, and (b) the Tree_Anim shader (BSLeafAnimNode + vertex-color
