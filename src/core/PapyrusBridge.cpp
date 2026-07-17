@@ -357,6 +357,18 @@ namespace SB::PapyrusBridge
         return ok;
     }
 
+    // cgf "SkyrimBridge.ConvertModelTree" "in.obj" "out.nif"  — same converter
+    // in tree mode: procedural wind weights painted into the vertex colors
+    // (127 trunk base rising to 255 at canopy extremities, the mapping real
+    // animated trees carry), SLSF2_Tree_Anim on the shader, BSLeafAnimNode
+    // root. Whether a STAT-placed reference sways is in-game validation.
+    static bool ConvertModelTree(RE::StaticFunctionTag*, RE::BSFixedString a_in, RE::BSFixedString a_out)
+    {
+        bool ok = ModelCodec::ConvertToNIF(a_in.c_str(), a_out.c_str(), true);
+        SKSE::log::info("ModelCodec: {} -> {} [tree] : {}", a_in.c_str(), a_out.c_str(), ok ? "ok" : "failed");
+        return ok;
+    }
+
     // cgf "SkyrimBridge.SpawnModel" "in.obj"  — the pragmatic runtime-model
     // path. Materializes the mesh under meshes\SkyrimBridge\spawn\ (foreign
     // formats convert; a .nif copies), creates a dynamic Static form whose
@@ -460,9 +472,10 @@ namespace SB::PapyrusBridge
         vm->RegisterFunction("ConvertTextureFoliage",  "SkyrimBridge", ConvertTextureFoliage);
         vm->RegisterFunction("TextureScanNow",         "SkyrimBridge", TextureScanNow);
         vm->RegisterFunction("ConvertModel",           "SkyrimBridge", ConvertModel);
+        vm->RegisterFunction("ConvertModelTree",       "SkyrimBridge", ConvertModelTree);
         vm->RegisterFunction("SpawnModel",             "SkyrimBridge", SpawnModel);
 
-        SKSE::log::info("PapyrusBridge: registered 33 native functions under 'SkyrimBridge'");
+        SKSE::log::info("PapyrusBridge: registered 34 native functions under 'SkyrimBridge'");
         return true;
     }
 }

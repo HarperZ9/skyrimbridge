@@ -32,7 +32,7 @@
 bl_info = {
     "name": "SkyrimBridge Push to Game",
     "author": "Zain Dana Harper",
-    "version": (1, 0, 0),
+    "version": (1, 1, 0),
     "blender": (3, 0, 0),
     "location": "View3D > Sidebar > SkyrimBridge",
     "description": "Push the selected mesh into a running Skyrim SE via SkyrimBridge",
@@ -134,12 +134,14 @@ def sanitize_name(name):
     return s or "pushed"
 
 
-def push_glb(glb_path, timeout=30.0, channel_name=CHANNEL_NAME):
-    """Spawn an exported mesh in the running game.
+def push_glb(glb_path, timeout=30.0, channel_name=CHANNEL_NAME, tree=False):
+    """Spawn an exported mesh in the running game. tree=True converts it as a
+    wind-animated tree (procedural sway weights + Tree_Anim shader).
     Returns (form_id, message). Raises ChannelError on any failure."""
     ch = SBChannel(channel_name).open()
     try:
-        status, form_id, text = ch.request("model.spawn", glb_path, timeout=timeout)
+        status, form_id, text = ch.request("model.spawn", glb_path,
+                                           arg_int=1 if tree else 0, timeout=timeout)
     finally:
         ch.close()
     if status != 0 or not form_id:
@@ -185,7 +187,7 @@ if bpy is not None:
                 return {"CANCELLED"}
 
             try:
-                form_id, text = push_glb(glb)
+                form_id, text = push_glb(glb, tree=wm.skyrimbridge_tree)
             except ChannelError as e:
                 wm.skyrimbridge_last = str(e)
                 self.report({"ERROR"}, wm.skyrimbridge_last)
@@ -204,6 +206,8 @@ if bpy is not None:
         def draw(self, context):
             col = self.layout.column()
             col.operator("skyrimbridge.push", icon="EXPORT")
+            col.prop(context.window_manager, "skyrimbridge_tree",
+                     text="Push as tree (wind sway)")
             last = getattr(context.window_manager, "skyrimbridge_last", "")
             if last:
                 for chunk in [last[i:i + 38] for i in range(0, len(last), 38)]:
@@ -215,6 +219,10 @@ if bpy is not None:
 
     def register():
         bpy.types.WindowManager.skyrimbridge_last = bpy.props.StringProperty(default="")
+        bpy.types.WindowManager.skyrimbridge_tree = bpy.props.BoolProperty(
+            default=False, name="Push as tree",
+            description="Convert with procedural wind sway weights and the "
+                        "Tree_Anim shader flag (trunk stiff, canopy sways)")
         for c in _classes:
             bpy.utils.register_class(c)
 
@@ -222,6 +230,7 @@ if bpy is not None:
         for c in reversed(_classes):
             bpy.utils.unregister_class(c)
         del bpy.types.WindowManager.skyrimbridge_last
+        del bpy.types.WindowManager.skyrimbridge_tree
 
     if __name__ == "__main__":
         register()

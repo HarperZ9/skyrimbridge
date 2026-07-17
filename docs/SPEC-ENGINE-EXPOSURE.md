@@ -162,6 +162,12 @@ cgf "SkyrimBridge.TextureScanNow" true                      ; dry-run the tree s
   hand-built blocks (every mode) and real modlist DXT1/DXT5 textures; encode
   output decodes identically under PIL and our model; PSNR floor; lossless
   round-trip on exactly-representable blocks; TGA layout via PIL read-back.
+- `tests/validate_tree_wind.py` — 22 checks. The empirical mapping asserted
+  on real animated trees (grayscale weights in [127,255], rising with
+  distance from base, Tree_Anim bit 29, constant per-shape alpha,
+  BSLeafAnimNode roots, vanilla's all-255 minimal config), plus the
+  generator port (monotone, 128..255, deterministic) and source-consistency
+  checks that the shipped ModelCodec.cpp carries exactly the derived values.
 - `tests/validate_foliage_mips.py` — 10 checks. Demonstrates the defect first
   (box-filter mips collapse a sparse synthetic foliage's alpha-test coverage
   to 0.000, and real modlist foliage decays measurably), then proves the fix:
@@ -206,13 +212,23 @@ texture-load hook: the engine constructs its own objects, we hand it files it
 natively loads. The dynamic form and reference persist in the save (test on a
 disposable save; remove via console `markfordelete`).
 
+**Tree mode** (`ConvertModelTree`, or `argInt = 1` on the model verbs): the
+converter paints procedural wind-sway weights into the vertex colors, sets
+`SLSF2_Tree_Anim`, and emits a `BSLeafAnimNode` root. The mapping is derived
+empirically from real animated tree assets and asserted by the receipt:
+grayscale R=G=B weight, 127/128 at the trunk base rising to 255 at canopy
+extremities (weight = `0.5 + 0.5 * e^1.5`, e = normalized distance from the
+trunk base), vertex alpha 255 (the vanilla-accepted constant; the aspens
+ship a constant 68 whose semantics are an unrecovered honest null).
+
 Honest nulls: no skinned/animated meshes, first primitive/group only, no
 collision (bhk*) generation, no Draco/sparse glTF; a spawned mesh's material
-is only as good as what the source carried (an untextured OBJ renders flat).
+is only as good as what the source carried (an untextured OBJ renders flat);
+whether a STAT-placed reference sways (vs needing a TREE form) is game-bound.
 
 ---
 
-## 5. Native API reference (33 natives, script name `SkyrimBridge`)
+## 5. Native API reference (34 natives, script name `SkyrimBridge`)
 
 Console form: `cgf "SkyrimBridge.<name>" <args...>`
 
@@ -272,6 +288,7 @@ Console form: `cgf "SkyrimBridge.<name>" <args...>`
 | Native | Signature |
 |---|---|
 | ConvertModel | `bool (string in, string out)` — OBJ/glTF/GLB in, NIF out |
+| ConvertModelTree | `bool (string in, string out)` — tree mode: wind vertex colors + Tree_Anim + BSLeafAnimNode root |
 | SpawnModel | `int (string in)` — convert + place at the player via the engine loader; returns the ref's FormID (MUTATES the save) |
 
 ---
@@ -326,8 +343,8 @@ the mailbox carries the trigger and a bounded 4 KiB text result.
 | `texture.convert` | `arg0` = in, `arg1` = out, `argInt` = 0/1/2/3 (RGBA8/BC1/BC3/BC7) | `resultInt` = ok |
 | `texture.foliage` | `arg0` = in, `arg1` = out, `argInt` = fmt \| (threshold << 8), threshold 0 -> 128 | coverage-preserving mips; `resultInt` = ok |
 | `texture.scan` | `argInt` = 1 dry / 0 live | `resultInt` = converted, counts in text |
-| `model.convert` | `arg0` = in, `arg1` = out | `resultInt` = ok |
-| `model.spawn` | `arg0` = in (foreign mesh or .nif) | `resultInt` = placed ref FormID as an int32 bit pattern (0xFFxxxxxx arrives negative; mask with 0xFFFFFFFF). MUTATES the save |
+| `model.convert` | `arg0` = in, `arg1` = out, `argInt` = 1 for tree mode | `resultInt` = ok |
+| `model.spawn` | `arg0` = in (foreign mesh or .nif), `argInt` = 1 for tree mode | `resultInt` = placed ref FormID as an int32 bit pattern (0xFFxxxxxx arrives negative; mask with 0xFFFFFFFF). MUTATES the save |
 
 Validation receipt: `tests/validate_command_protocol.py` (15 checks) verifies
 the 5184-byte ABI layout field-for-field against a Python `ctypes` mirror and

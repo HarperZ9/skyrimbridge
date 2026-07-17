@@ -196,6 +196,18 @@ then discard the save.
 **Record:** whether the shape appears at all (loader accepted our NIF), scale
 and orientation sanity, and any crash on `markfordelete` or cell reload.
 
+**Tree mode (F16):** repeat the spawn with tree conversion, either
+`cgf "SkyrimBridge.ConvertModelTree" "Data/test.obj" "Data/meshes/SkyrimBridge/spawn/test.nif"`
+then `SpawnModel` on that .nif, or tick "Push as tree" in the Blender addon.
+The decisive observation, genuinely unknown until you look: does the
+STAT-placed mesh sway in the wind? The shader carries Tree_Anim and the
+vertex colors carry the weights (trunk stiff, canopy loose), exactly as real
+animated trees do, but real trees are placed as TREE forms. Record: sway or
+static; if it sways, whether the base stays planted (weight ramp working);
+any shading oddity (the grayscale weights also feed vertex-color shading).
+A static result is DATA, not failure: it tells us TREE-form placement is the
+missing piece, which becomes its own lane.
+
 **Blender addon path (same feature, the QoL front end):** install
 `tools/blender/skyrimbridge_push.py` (Edit > Preferences > Add-ons >
 Install...), enable it, open the View3D sidebar (N) > SkyrimBridge. With the

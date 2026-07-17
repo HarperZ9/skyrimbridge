@@ -23,6 +23,8 @@
 namespace SB::ModelSpawn
 {
     // Returns the placed reference's FormID, 0 on failure with the failing
-    // stage named in err (also logged).
-    std::uint32_t SpawnAtPlayer(const std::filesystem::path& in, std::string& err);
+    // stage named in err (also logged). treeMode converts foreign meshes as
+    // wind-animated trees (ModelCodec tree mode; no effect on .nif copies).
+    std::uint32_t SpawnAtPlayer(const std::filesystem::path& in, std::string& err,
+                                bool treeMode = false);
 }

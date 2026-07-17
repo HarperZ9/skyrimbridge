@@ -360,9 +360,22 @@ order agreed with the operator:
     coverage under naive mips, real modlist foliage decays measurably; fix
     holds c0 on every mip and survives BC3 quantization). The in-game payoff
     (distant foliage keeps its density) is aesthetic and operator-judged.
-16. Tree wind vertex-color auto-painting + Tree shader type in ModelCodec;
-    verify the channel-to-sway mapping against a vanilla tree NIF offline
-    first. (open)
+16. ~~Tree wind vertex-color auto-painting~~ DONE 2026-07-16 late, the
+    verification-first way: the channel mapping was derived empirically from
+    real animated trees BEFORE any code (Aspens Ablaze + vanilla Dawnguard
+    glade tree, parsed offline): animated shapes carry SLSF2 bit 29
+    (Tree_Anim); the sway weight is grayscale R=G=B vertex color, 127 on
+    near-rigid geometry rising to 255 at canopy extremities (positive
+    correlation with distance from the trunk base, +0.36..+0.54 on leaf
+    shapes); vertex alpha constant per shape (vanilla 255, aspens 68,
+    semantics unrecovered = honest null); roots are BSLeafAnimNode.
+    ModelCodec tree mode reproduces exactly that (weight 0.5 + 0.5*e^1.5 on
+    normalized distance from base, alpha 255, Tree_Anim, BSLeafAnimNode).
+    Surfaces: ConvertModelTree native (34th), argInt=1 tree mode on
+    model.convert / model.spawn, "Push as tree" checkbox in the Blender
+    addon (v1.1.0). Offline-proven: tests/validate_tree_wind.py, 22/22.
+    Game-bound (protocol section 7): does the pushed tree sway, and does a
+    STAT-placed reference animate at all vs needing a TREE form.
 17. TESGrass/GRAS schema in EngineReflect (one block). (open)
 18. Convex-hull collision investigation (bhkConvexVerticesShape, MOPP-free;
     confidence moderate until checked against real NIFs). (open, scoped

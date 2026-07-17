@@ -74,9 +74,11 @@ namespace SB
     //                  (fmt as texture.convert; threshold 0 -> 128). Coverage-
     //                  preserving mips for alpha-tested foliage. -> resultInt = ok
     //   texture.scan   argInt = 1 (dry) | 0 (live) -> resultInt = converted
-    //   model.convert  arg0 = in, arg1 = out       -> resultInt = ok
-    //   model.spawn    arg0 = in (foreign mesh or .nif) -> resultInt = placed
-    //                  reference FormID (0 = failed). MUTATES the save.
+    //   model.convert  arg0 = in, arg1 = out, argInt = 1 for tree mode
+    //                  (wind vertex colors + Tree_Anim)  -> resultInt = ok
+    //   model.spawn    arg0 = in (foreign mesh or .nif), argInt = 1 for tree
+    //                  mode -> resultInt = placed reference FormID
+    //                  (0 = failed). MUTATES the save.
 
     #pragma pack(pop)
 }

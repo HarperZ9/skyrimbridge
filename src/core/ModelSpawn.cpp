@@ -10,7 +10,8 @@
 
 namespace SB::ModelSpawn
 {
-    std::uint32_t SpawnAtPlayer(const std::filesystem::path& in, std::string& err)
+    std::uint32_t SpawnAtPlayer(const std::filesystem::path& in, std::string& err,
+                                bool treeMode)
     {
         auto* player = RE::PlayerCharacter::GetSingleton();
         if (!player || !player->Is3DLoaded()) {
@@ -30,7 +31,7 @@ namespace SB::ModelSpawn
             std::filesystem::copy_file(in, out, std::filesystem::copy_options::overwrite_existing, ec);
             ok = !ec;
         } else {
-            ok = ModelCodec::ConvertToNIF(in, out);
+            ok = ModelCodec::ConvertToNIF(in, out, treeMode);
         }
         if (!ok) {
             err = "could not materialize " + in.string() + " -> " + out.string();

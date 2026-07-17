@@ -57,10 +57,17 @@ namespace SB::ModelCodec
     void FinalizeMesh(Mesh& m);
 
     // Serialize a finalized mesh to SSE NIF bytes. Empty on failure.
-    std::vector<std::uint8_t> WriteNIF(const Mesh& m);
+    //
+    // treeMode emits a wind-animated tree: procedural sway weights painted
+    // into the vertex colors (grayscale, 127 at the trunk base rising to 255
+    // at canopy extremities), SLSF2_Tree_Anim set on the shader, and a
+    // BSLeafAnimNode root. The mapping is derived empirically from real
+    // animated tree assets; receipt: tests/validate_tree_wind.py.
+    std::vector<std::uint8_t> WriteNIF(const Mesh& m, bool treeMode = false);
 
     // Convenience: any supported input -> .nif on disk.
-    bool ConvertToNIF(const std::filesystem::path& in, const std::filesystem::path& out);
+    bool ConvertToNIF(const std::filesystem::path& in, const std::filesystem::path& out,
+                      bool treeMode = false);
 
     // Half-float codec (exposed for the offline validator).
     std::uint16_t FloatToHalf(float f);

@@ -144,7 +144,7 @@ namespace SB::ModelCodec
     }
 
     // ── NIF writer ───────────────────────────────────────────────────────
-    std::vector<std::uint8_t> WriteNIF(const Mesh& mesh)
+    std::vector<std::uint8_t> WriteNIF(const Mesh& mesh, bool treeMode)
     {
         Mesh m = mesh;
         FinalizeMesh(m);
@@ -164,6 +164,34 @@ namespace SB::ModelCodec
         Vec3 center{ (lo.x + hi.x) * 0.5f, (lo.y + hi.y) * 0.5f, (lo.z + hi.z) * 0.5f };
         float radius = 0;
         for (auto& p : m.positions) { Vec3 d = sub(p, center); radius = std::max(radius, std::sqrt(dot(d, d))); }
+
+        // Tree mode: procedural wind weights. Derived empirically from real
+        // animated tree shapes (Aspens Ablaze, vanilla Dawnguard glade tree;
+        // receipt: tests/validate_tree_wind.py): the engine's Tree_Anim
+        // vertex shader reads the vertex color, grayscale R=G=B, as the sway
+        // weight. Real assets sit at 127 on near-rigid geometry and rise to
+        // 255 at canopy extremities (value grows with height AND radial
+        // distance from the trunk). We reproduce that with distance from the
+        // trunk base (horizontal center at the lowest point), eased so the
+        // lower trunk stays stiff. Alpha stays 255, the vanilla-accepted
+        // constant (aspens ship a constant 68; its semantics are an honest
+        // null, unrecovered).
+        std::vector<std::uint8_t> wind;
+        if (treeMode) {
+            const Vec3 base{ center.x, center.y, lo.z };
+            float maxd = 1e-6f;
+            for (auto& p : m.positions) {
+                Vec3 d = sub(p, base);
+                maxd = std::max(maxd, std::sqrt(dot(d, d)));
+            }
+            wind.reserve(nv);
+            for (auto& p : m.positions) {
+                Vec3 d = sub(p, base);
+                float e = std::sqrt(dot(d, d)) / maxd;          // 0 base .. 1 tip
+                float w = 0.5f + 0.5f * std::pow(e, 1.5f);      // 127 .. 255, stiff low trunk
+                wind.push_back(static_cast<std::uint8_t>(w * 255.0f + 0.5f));
+            }
+        }
 
         // ── block bodies ──────────────────────────────────────────────────
         const std::int32_t ROOT_NAME = 0, SHAPE_NAME = 1;
@@ -204,7 +232,8 @@ namespace SB::ModelCodec
             b1.u16(FloatToHalf(m.uvs[i].x)); b1.u16(FloatToHalf(m.uvs[i].y));   // UV @16
             b1.u8(packSnorm(n.x)); b1.u8(packSnorm(n.y)); b1.u8(packSnorm(n.z)); b1.u8(packSnorm(bit.y));   // normal + bit.y @20
             b1.u8(packSnorm(t.x)); b1.u8(packSnorm(t.y)); b1.u8(packSnorm(t.z)); b1.u8(packSnorm(bit.z));   // tangent + bit.z @24
-            b1.u8(255); b1.u8(255); b1.u8(255); b1.u8(255); // vertex color @28
+            const std::uint8_t vc = treeMode ? wind[i] : 255;   // vertex color @28: wind weight in tree mode
+            b1.u8(vc); b1.u8(vc); b1.u8(vc); b1.u8(255);
         }
         for (std::size_t i = 0; i < nt; ++i) {
             b1.u16(static_cast<std::uint16_t>(m.indices[i * 3 + 0]));
@@ -216,7 +245,8 @@ namespace SB::ModelCodec
         Buf b2;   // BSLightingShaderProperty
         b2.u32(0);                                           // shaderType = Default
         b2.i32(-1); b2.u32(0); b2.i32(-1);                   // name, extra, controller
-        b2.u32(0x82400301); b2.u32(0x08008071);              // SLSF1 / SLSF2 (known-good opaque + vertex colors)
+        b2.u32(0x82400301);                                  // SLSF1 (known-good opaque)
+        b2.u32(treeMode ? 0x28008071u : 0x08008071u);        // SLSF2: vertex colors (+ Tree_Anim in tree mode)
         b2.f32(0); b2.f32(0);                                // uvOffset
         b2.f32(1); b2.f32(1);                                // uvScale
         b2.i32(3);                                           // textureSet -> block 3
@@ -238,7 +268,10 @@ namespace SB::ModelCodec
 
         // ── header ────────────────────────────────────────────────────────
         const std::vector<Buf*> blocks = { &b0, &b1, &b2, &b3 };
-        const char* typeNames[4] = { "BSFadeNode", "BSTriShape", "BSLightingShaderProperty", "BSShaderTextureSet" };
+        // Tree roots are BSLeafAnimNode in real assets (NiNode-identical
+        // body; only the type differs), which drives the leaf-anim timing.
+        const char* typeNames[4] = { treeMode ? "BSLeafAnimNode" : "BSFadeNode",
+                                     "BSTriShape", "BSLightingShaderProperty", "BSShaderTextureSet" };
         const std::uint16_t typeIndex[4] = { 0, 1, 2, 3 };
 
         Buf h;
@@ -601,11 +634,12 @@ namespace SB::ModelCodec
         return m;
     }
 
-    bool ConvertToNIF(const std::filesystem::path& in, const std::filesystem::path& out)
+    bool ConvertToNIF(const std::filesystem::path& in, const std::filesystem::path& out,
+                      bool treeMode)
     {
         Mesh m = LoadFile(in);
         if (!m.valid) return false;
-        auto bytes = WriteNIF(m);
+        auto bytes = WriteNIF(m, treeMode);
         if (bytes.empty()) return false;
         std::ofstream f(out, std::ios::binary | std::ios::trunc);
         if (!f) return false;
