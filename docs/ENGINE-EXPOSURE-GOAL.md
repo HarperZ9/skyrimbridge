@@ -271,9 +271,10 @@ confidence are labeled honestly.
     (`SharedMemoryBridge`) for external tools, and optionally a small local IPC
     endpoint, so EngineReflect + TextureCodec are usable by an external editor,
     not only console. (moderate)
-11. Documentation as a first-class product surface (this is the operator's
-    shipping posture): a spec sheet for the record schemas, the config formats,
-    and the native API. Keep docs in the same commit as the code.
+11. ~~Documentation spec sheet~~ DONE 2026-07-16: `docs/SPEC-ENGINE-EXPOSURE.md`
+    (schemas table with verified field counts, region walker, texture format
+    matrix, all 29 natives with signatures + console forms, config grammar,
+    validation receipts). Keep it in the same commit as any surface change.
 
 **Lane E: close the honest nulls already on record.**
 12. Reverse `AELAS.dll`'s hooks (a plugin DLL, NOT DRM-packed, so static disasm
