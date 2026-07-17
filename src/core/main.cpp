@@ -37,6 +37,8 @@
 #include "EnbLightInventoryFix.h"
 #include "EngineReflect.h"
 #include "EngineFixes.h"
+#include "TextureAutoConvert.h"
+#include "TextureLoadHook.h"
 
 // GPU tier
 #include "D3D11Hook.h"
@@ -123,6 +125,8 @@ struct NativeConfig
     bool sky = true;
     bool enbLightInventoryFix = false;
     bool engineFixes = true;    // recovered AE spin-lock patch; validated before write
+    bool textureAutoConvert = false;   // startup foreign-texture transcode (opt-in)
+    bool textureLoadHook = false;      // in-flight foreign-texture substitution (opt-in)
 };
 static NativeConfig s_native;
 
@@ -136,6 +140,8 @@ static void LoadNativeConfig(const std::filesystem::path& configDir)
         s_native.sky                  = s->Bool("Sky", s_native.sky);
         s_native.enbLightInventoryFix = s->Bool("EnbLightInventoryFix", s_native.enbLightInventoryFix);
         s_native.engineFixes          = s->Bool("EngineFixes", s_native.engineFixes);
+        s_native.textureAutoConvert   = s->Bool("TextureAutoConvert", s_native.textureAutoConvert);
+        s_native.textureLoadHook      = s->Bool("TextureLoadHook", s_native.textureLoadHook);
     }
 }
 
@@ -440,6 +446,12 @@ static void OnMessage(SKSE::MessagingInterface::Message* a_msg)
         LoadNativeConfig(std::filesystem::path("Data/SKSE/Plugins/SkyrimBridge"));
         if (s_native.enbLightInventoryFix)
             SB::EnbLightInventoryFix::Get().Install();
+
+        // In-flight foreign-texture substitution installs before any texture
+        // can load. Redirect-only detours on LooseFileLocation; opt-in.
+        if (s_native.textureLoadHook)
+            SB::TextureLoadHook::Get().Install(
+                std::filesystem::path("Data/SKSE/Plugins/SkyrimBridge"));
         break;
     }
 
@@ -525,6 +537,11 @@ static void OnMessage(SKSE::MessagingInterface::Message* a_msg)
         // engine via the Address Library. Validated before each write.
         if (s_native.engineFixes)
             SB::EngineFixes::Get().Install();
+
+        // Foreign-texture transcode pass: background scan of the texture tree
+        // for .png/.tga/.bmp without a .dds sibling. Opt-in.
+        if (s_native.textureAutoConvert)
+            SB::TextureAutoConvert::Get().Initialize(configDir);
 
         // ── GPU tier ─────────────────────────────────────────────────────
         LoadGPUConfig(configDir);

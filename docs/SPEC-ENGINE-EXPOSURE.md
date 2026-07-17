@@ -125,7 +125,23 @@ and `(a+b)/2` color interpolation, truncating `/7` and `/5` alpha ramps.
 cgf "SkyrimBridge.ConvertTexture" "in.png" "out.dds"        ; by output extension
 cgf "SkyrimBridge.ConvertTexture" "in.dds" "out.tga"        ; DDS -> editable lane
 cgf "SkyrimBridge.ConvertTextureFmt" "in.png" "out.dds" "BC3"  ; BC1 | BC3 | RGBA8
+cgf "SkyrimBridge.TextureScanNow" true                      ; dry-run the tree scan
 ```
+
+### Automatic integration (both `[Native]`-gated, ship OFF)
+
+- **TextureAutoConvert** — background scan at data-load: every
+  `textures\*.png/.tga/.bmp` without a `.dds` sibling is transcoded next to it
+  (additive; an existing `.dds` is never overwritten unless
+  `[TextureConvert] Refresh` and the source is newer).
+- **TextureLoadHook** — in-flight substitution. Vtable detours over
+  `BSResource::LooseFileLocation`'s stream/async/info functions: a missing
+  `textures\*.dds` whose foreign sibling exists is transcoded once into
+  `SkyrimBridge/texcache/` and the original engine function is re-invoked on
+  the cache path, so sync and async I/O stay engine-native. The detours act
+  only after the original call already failed, and any internal failure
+  returns the original error unchanged. A loose foreign texture overrides a
+  BSA `.dds`, same as a loose `.dds` would.
 
 ### Validation receipts (in-repo, re-runnable)
 
@@ -144,7 +160,7 @@ the real files in the modlist.
 
 ---
 
-## 4. Native API reference (29 natives, script name `SkyrimBridge`)
+## 4. Native API reference (30 natives, script name `SkyrimBridge`)
 
 Console form: `cgf "SkyrimBridge.<name>" <args...>`
 
@@ -197,6 +213,7 @@ Console form: `cgf "SkyrimBridge.<name>" <args...>`
 |---|---|
 | ConvertTexture | `bool (string in, string out)` |
 | ConvertTextureFmt | `bool (string in, string out, string fmt)` |
+| TextureScanNow | `int (bool dryRun)` — converted (or would-convert) count |
 
 ---
 

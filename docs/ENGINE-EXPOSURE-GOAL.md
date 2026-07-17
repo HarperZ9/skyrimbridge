@@ -86,7 +86,7 @@ almost never necessary because CommonLib covers it.
 
 ## 3. What is built, compiled, and installed (the current state)
 
-Repo: `C:\dev\skyrimbridge\` (50+ core sources, 29 Papyrus natives). Build with
+Repo: `C:\dev\skyrimbridge\` (50+ core sources, 30 Papyrus natives). Build with
 VS18 + CommonLibSSE-NG 3.7.0 (static x64 triplet). Installed DLL target:
 `E:\Modlists\SkyGroundChronicles\mods\SkyrimBridge\SKSE\Plugins\SkyrimBridge.dll`.
 
@@ -251,13 +251,31 @@ confidence are labeled honestly.
 7. ~~**BC1/BC3 block compression**~~ DONE 2026-07-16 (encode + decode, PIL-exact
    decode model, baseline encoder tier; DDS read + TGA write landed with it).
    OPEN remainder: BC7 (genuinely hard to do well) and DX10-header DDS.
-8. **The runtime texture-substitution hook (the payoff).** Hook the game's
-   texture-load path so a dropped `.png`/`.tga`/`.bmp` is decoded by TextureCodec
-   and served where the engine expects `.dds`, transparently. SkyrimBridge
-   already owns a D3D11 hook/proxy (`D3D11Hook`, `src/d3d11_proxy/`). This is
-   game-bound: identify the load function (via CommonLib / the community), wrap
-   TextureCodec, create the ID3D11Texture2D + SRV. Ship gated, validate in-game.
-   (hard, game-bound)
+8. ~~**The runtime texture-substitution hook (the payoff).**~~ BUILT 2026-07-16,
+   game-bound validation pending. Two halves, both `[Native]`-gated OFF:
+   - `TextureAutoConvert` (`src/core/TextureAutoConvert.{h,cpp}`): background
+     scan at kDataLoaded; every `textures\*.png/.tga/.bmp` without a `.dds`
+     sibling is transcoded next to it (additive only). Console:
+     `TextureScanNow true|false` (dry run / live). Offline dry-run against the
+     real modlist found 163 foreign textures, 22 without a `.dds` sibling.
+   - `TextureLoadHook` (`src/core/TextureLoadHook.{h,cpp}`): vtable detours on
+     `BSResource::LooseFileLocation` (CommonLib VTABLE VariantID 232012/188191)
+     over DoCreateStream/DoCreateAsyncStream/DoGetInfo1/DoGetInfo2. On a missing
+     `textures\*.dds` with a foreign sibling: transcode once into
+     `SkyrimBridge/texcache/` under the location's own prefix, then re-invoke
+     the ORIGINAL vfunc on the cache path, so the engine serves its own
+     LooseFileStream (sync + async both engine-native; no synthetic engine
+     objects, which is decisive on AE where `LooseFileStream::Create` is
+     compiled out of CommonLib). Detours act only after the original call
+     missed, only under `textures\`, never on cache paths; thunks call through
+     the saved original pointer (coexists with other vtable patchers).
+     Semantics note: a loose foreign texture overrides a BSA `.dds`, matching
+     the loose-over-archive rule. NOT re-derived from the DRM'd exe: design
+     corroborated by FileCacheSSE (Location vfuncs 03/05/06/07 hook family) and
+     Faster-File-Copy (BSResource vtable patches proven on AE 1.6.1170).
+   In-game validation: enable both, drop a PNG at a mesh-referenced
+   `textures\` path with no `.dds`, confirm it renders + check
+   SkyrimBridge.log for "TextureLoadHook: ... -> texcache/". (game-bound)
 
 **Lane C: the model pipeline (R&D, the ambitious 20%).**
 9. **glTF / OBJ static-mesh import to runtime NiObject graphs.** Construct

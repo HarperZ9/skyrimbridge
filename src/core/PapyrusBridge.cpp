@@ -24,6 +24,7 @@
 #include "EngineReflect.h"
 #include "RegionWalker.h"
 #include "TextureCodec.h"
+#include "TextureAutoConvert.h"
 #include <RE/Skyrim.h>
 #include <SKSE/SKSE.h>
 #include <cstring>
@@ -332,6 +333,18 @@ namespace SB::PapyrusBridge
         return ok;
     }
 
+    // cgf "SkyrimBridge.TextureScanNow" true   -> dry run (counts only, no writes)
+    // cgf "SkyrimBridge.TextureScanNow" false  -> convert foreign textures now
+    static int32_t TextureScanNow(RE::StaticFunctionTag*, bool a_dryRun)
+    {
+        auto r = TextureAutoConvert::Get().RunScan(a_dryRun);
+        SKSE::log::info("TextureAutoConvert ({}): {} foreign, {} would-convert/converted, "
+                        "{} have .dds, {} failed",
+                        a_dryRun ? "dry run" : "live",
+                        r.candidates, r.converted, r.skipped, r.failed);
+        return static_cast<int32_t>(r.converted);
+    }
+
     static bool ConvertTextureFmt(RE::StaticFunctionTag*, RE::BSFixedString a_in,
                                   RE::BSFixedString a_out, RE::BSFixedString a_fmt)
     {
@@ -391,8 +404,9 @@ namespace SB::PapyrusBridge
 
         vm->RegisterFunction("ConvertTexture",      "SkyrimBridge", ConvertTexture);
         vm->RegisterFunction("ConvertTextureFmt",   "SkyrimBridge", ConvertTextureFmt);
+        vm->RegisterFunction("TextureScanNow",      "SkyrimBridge", TextureScanNow);
 
-        SKSE::log::info("PapyrusBridge: registered 29 native functions under 'SkyrimBridge'");
+        SKSE::log::info("PapyrusBridge: registered 30 native functions under 'SkyrimBridge'");
         return true;
     }
 }
