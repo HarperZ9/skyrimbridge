@@ -27,6 +27,7 @@
 #include "TextureAutoConvert.h"
 #include "ModelCodec.h"
 #include "ModelSpawn.h"
+#include "CellReport.h"
 #include <RE/Skyrim.h>
 #include <SKSE/SKSE.h>
 #include <cstring>
@@ -374,6 +375,22 @@ namespace SB::PapyrusBridge
     // recipe: bhkConvexVerticesShape + templated static rigid body; a
     // degenerate hull falls back to no collision). Walk-testing in-game is
     // the collision acceptance oracle.
+    // cgf "SkyrimBridge.CellReport"  — one-command performance census of the
+    // player's current cell: refs by type, every shadow-casting light with
+    // plugin attribution and distance (nearest first), refs per winning
+    // plugin. Read-only. Full text: SkyrimBridge/dumps/cellreport.txt.
+    // Returns the shadow-casting light count (-1 = no cell).
+    static std::int32_t CellReportNative(RE::StaticFunctionTag*)
+    {
+        auto text = CellReport::Run();
+        if (text.empty()) {
+            SKSE::log::warn("CellReport: no player cell (in-game only)");
+            return -1;
+        }
+        auto pos = text.find("shadowLights=");
+        return pos != std::string::npos ? std::atoi(text.c_str() + pos + 13) : 0;
+    }
+
     static bool ConvertModelEx(RE::StaticFunctionTag*, RE::BSFixedString a_in, RE::BSFixedString a_out,
                                bool a_tree, bool a_collision)
     {
@@ -490,8 +507,9 @@ namespace SB::PapyrusBridge
         vm->RegisterFunction("ConvertModelTree",       "SkyrimBridge", ConvertModelTree);
         vm->RegisterFunction("ConvertModelEx",         "SkyrimBridge", ConvertModelEx);
         vm->RegisterFunction("SpawnModel",             "SkyrimBridge", SpawnModel);
+        vm->RegisterFunction("CellReport",             "SkyrimBridge", CellReportNative);
 
-        SKSE::log::info("PapyrusBridge: registered 35 native functions under 'SkyrimBridge'");
+        SKSE::log::info("PapyrusBridge: registered 36 native functions under 'SkyrimBridge'");
         return true;
     }
 }

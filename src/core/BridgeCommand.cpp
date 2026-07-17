@@ -11,6 +11,7 @@
 #include "TextureAutoConvert.h"
 #include "ModelCodec.h"
 #include "ModelSpawn.h"
+#include "CellReport.h"
 
 #include <RE/Skyrim.h>
 #include <SKSE/SKSE.h>
@@ -158,6 +159,13 @@ namespace SB
                          : b->argInt == 3 ? TexCodec::DDSFormat::BC7 : TexCodec::DDSFormat::RGBA8;
                 b->resultInt = TexCodec::Convert(b->arg0, b->arg1, fmt) ? 1 : 0;
                 return b->resultInt ? kCmdOK : kCmdFailed;
+            }
+            if (verb == "cell.report") {         // read-only performance census
+                auto text = CellReport::Run();
+                if (text.empty()) { SetText(b, "no player cell (in-game only)"); return kCmdFailed; }
+                b->resultInt = static_cast<std::int32_t>(text.size());
+                SetText(b, text);                // 4 KiB window; full text in dumps/
+                return kCmdOK;
             }
             if (verb == "texture.foliage") {     // coverage-preserving mips
                 const int f = b->argInt & 0xFF;  // same format map as texture.convert

@@ -57,6 +57,7 @@ add_commonlibsse_plugin(
         src/core/ModelCodec.cpp
         src/core/ModelSpawn.cpp
         src/core/BridgeCommand.cpp
+        src/core/CellReport.cpp
 
         # Core trackers (domains 1-10)
         src/core/CelestialTracker.cpp

@@ -230,6 +230,25 @@ Orientation is part of the claim: the addon exports Z-up specifically so the
 model arrives upright; a mesh lying on its side is a FAIL (record it). Same
 save rules as above: disposable save, `markfordelete` to clean up.
 
+## 8. Cell performance census (per-op, read-only)
+
+No toggle and no writes; safe to run anywhere in-game.
+
+**Steps:** stand in a cell you know is heavy (a cluttered ELFX interior is
+ideal). Run `cgf "SkyrimBridge.CellReport"` (or `cell.report` over the
+channel). Open `SkyrimBridge/dumps/cellreport.txt`.
+
+**Pass:** the counts are plausible against the console's own knowledge
+(click a listed shadow-light ref: `prid <formid>` then `getpos x` places
+it; the winning plugin matches what More Informative Console shows for the
+same ref); an exterior and an interior both produce reports; the
+shadow-light list is nearest-first.
+
+**The payoff to record:** disable the nearest listed shadow lights
+(`prid <formid>`, `disable`) and note the FPS change. If the report's
+nearest shadow lights are the frame cost, the census just replaced the
+manual hunt.
+
 ---
 
 ## After a PASS

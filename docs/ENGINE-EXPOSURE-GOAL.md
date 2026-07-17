@@ -411,6 +411,28 @@ order agreed with the operator:
     lane, not R&D. Honest limit: convex cannot be concave; MOPP-accurate
     mesh collision stays out of scope.
 
+**Lane G: community pain points, never-built fixes (opened 2026-07-16 late,
+operator-directed).** Assessment of record with sources and the full
+category table: `docs/PAIN-POINTS-ASSESSMENT-2026-07.md`. Build order:
+20. ~~Cell performance census~~ DONE 2026-07-16 late:
+    `src/core/CellReport.{h,cpp}` + `CellReport` native (36th) +
+    `cell.report` verb (13th). One command turns the manual CK/xEdit
+    shadow-light hunt into a live report: refs by form type, every
+    shadow-casting light (SpotShadow/HemiShadow/OmniShadow bits) with the
+    placed ref's FormID, winning plugin, and distance nearest-first, and
+    per-plugin ref counts (who is crowding this cell). Read-only; full text
+    to dumps/cellreport.txt. Compile-verified against CommonLib
+    (ForEachReference, sourceFiles, TES_LIGHT_FLAGS); the numbers are
+    game-bound (protocol section 8). Honest scope: counts and attribution,
+    not per-draw GPU timing; the shadow-light list is the community's own
+    proven proxy.
+21. Live Papyrus VM monitor over the channel (running/suspended stacks, top
+    script instance counts; ReSaver is post-mortem only). Moderate
+    CommonLib API risk. (open, next)
+22. Modlist smoke tour: external driver walks the game through N cells via
+    the channel collecting log/crash evidence; needs a teleport verb.
+    (open, scoped after 21)
+
 **Lane E: close the honest nulls already on record.**
 12. ~~Reverse `AELAS.dll`'s hooks / sun repositioning~~ DONE 2026-07-16 in two
     parts. The reversal: AELAS is a KiLoader/KiRELibSkyrim plugin (NOT

@@ -67,6 +67,9 @@ namespace SB
     //   reflect.dump   arg0 = "0x<formid>"         -> resultText = INI, resultInt = fields
     //   reflect.apply  arg0 = "0x<formid>", resultText(in) = INI  -> resultInt = fields written
     //   reflect.verify arg0 = "0x<formid>", argInt = 1 -> strict  -> resultInt = fields (0 = fail)
+    //   cell.report    (no args) -> resultText = performance census of the
+    //                  player's cell (shadow lights, refs by type/plugin);
+    //                  full text in dumps/cellreport.txt
     //   region.dump    arg0 = "0x<region>"         -> resultText
     //   region.weather arg0 = "0x<region>", arg1 = "0x<weather>", argInt = chance -> resultInt
     //   texture.convert arg0 = in, arg1 = out, argInt = 0|1|2|3 (RGBA8|BC1|BC3|BC7) -> resultInt = ok
