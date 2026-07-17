@@ -111,6 +111,31 @@ namespace SB::Reflect
     +[](const RE::TESForm* f){ auto& c = static_cast<const RE::TYPE*>(f)->MEMBER; return Value::C3(c.red/255.f, c.green/255.f, c.blue/255.f); }, \
     +[](RE::TESForm* f, const Value& v){ auto& c = static_cast<RE::TYPE*>(f)->MEMBER; c.red = U8n(v.col[0]); c.green = U8n(v.col[1]); c.blue = U8n(v.col[2]); } }
 
+// Generic signed/unsigned integer member of C type CTYPE (int16/int32/uint16...).
+#define RF_INT(TYPE, NAME, MEMBER, CTYPE) Field{ NAME, Value::Kind::Int, \
+    +[](const RE::TESForm* f){ return Value::I(static_cast<long long>(static_cast<const RE::TYPE*>(f)->MEMBER)); }, \
+    +[](RE::TESForm* f, const Value& v){ static_cast<RE::TYPE*>(f)->MEMBER = static_cast<CTYPE>(static_cast<long long>(v.num)); } }
+
+#define RF_B(TYPE, NAME, MEMBER) Field{ NAME, Value::Kind::Bool, \
+    +[](const RE::TESForm* f){ return Value::B(static_cast<const RE::TYPE*>(f)->MEMBER); }, \
+    +[](RE::TESForm* f, const Value& v){ static_cast<RE::TYPE*>(f)->MEMBER = (v.num != 0); } }
+
+// stl::enumeration flag/enum member: raw underlying value as Int.
+#define RF_FLAGS(TYPE, NAME, MEMBER, ENUMT) Field{ NAME, Value::Kind::Int, \
+    +[](const RE::TESForm* f){ return Value::I(static_cast<long long>(static_cast<const RE::TYPE*>(f)->MEMBER.underlying())); }, \
+    +[](RE::TESForm* f, const Value& v){ static_cast<RE::TYPE*>(f)->MEMBER = static_cast<ENUMT>(static_cast<long long>(v.num)); } }
+
+// BSFixedString member (e.g. TESTexture::textureName).
+#define RF_S(TYPE, NAME, MEMBER) Field{ NAME, Value::Kind::String, \
+    +[](const RE::TESForm* f){ return Value::S(static_cast<const RE::TYPE*>(f)->MEMBER.c_str()); }, \
+    +[](RE::TESForm* f, const Value& v){ static_cast<RE::TYPE*>(f)->MEMBER = v.str.c_str(); } }
+
+// Form-pointer member <-> FormID (0 clears; a bad ID is a no-op, never a wild write).
+#define RF_LINK(TYPE, NAME, MEMBER, TARGET) Field{ NAME, Value::Kind::FormLink, \
+    +[](const RE::TESForm* f){ auto* p = static_cast<const RE::TYPE*>(f)->MEMBER; return Value::Link(p ? p->GetFormID() : 0u); }, \
+    +[](RE::TESForm* f, const Value& v){ auto* t = static_cast<RE::TYPE*>(f); if (!v.id) { t->MEMBER = nullptr; return; } \
+        if (auto* p = RE::TESForm::LookupByID<RE::TARGET>(v.id)) t->MEMBER = p; } }
+
     // ── Weather schema builder (indexed arrays -> generated fields) ───────
     static const char* kToD[4] = { "Sunrise", "Day", "Sunset", "Night" };
     static const char* kCT[17] = {
@@ -341,7 +366,314 @@ namespace SB::Reflect
                 [](RE::TESForm* f, const Value& v){ auto* r = static_cast<RE::TESRegion*>(f); if (!v.id) { r->currentWeather = nullptr; return; } if (auto* p = RE::TESForm::LookupByID<RE::TESWeather>(v.id)) r->currentWeather = p; } },
         }});
 
+        // Light (TESObjectLIGH): DATA + FNAM fade + emittance + links.
+        R.push_back(Schema{ "Light", RE::TESObjectLIGH::FORMTYPE, {
+            RF_INT(TESObjectLIGH, "Time", data.time, std::int32_t),
+            RF_INT(TESObjectLIGH, "Radius", data.radius, std::uint32_t),
+            RF_C3B(TESObjectLIGH, "Color", data.color),
+            RF_FLAGS(TESObjectLIGH, "Flags", data.flags, RE::TES_LIGHT_FLAGS),
+            RF_F(TESObjectLIGH, "FalloffExponent", data.fallofExponent),
+            RF_F(TESObjectLIGH, "FOV", data.fov),
+            RF_F(TESObjectLIGH, "NearDistance", data.nearDistance),
+            RF_F(TESObjectLIGH, "FlickerPeriodRecip", data.flickerPeriodRecip),
+            RF_F(TESObjectLIGH, "FlickerIntensityAmplitude", data.flickerIntensityAmplitude),
+            RF_F(TESObjectLIGH, "FlickerMovementAmplitude", data.flickerMovementAmplitude),
+            RF_F(TESObjectLIGH, "Fade", fade),
+            RF_C3F(TESObjectLIGH, "EmittanceColor", emittanceColor),
+            RF_LINK(TESObjectLIGH, "Sound", sound, BGSSoundDescriptorForm),
+            RF_LINK(TESObjectLIGH, "LensFlare", lensFlare, BGSLensFlare),
+        }});
+
+        // Water (TESWaterForm): the full DNAM shader block + noise/velocity +
+        // links. Unnamed (unkXX) members are excluded, not guessed.
+        R.push_back(Schema{ "Water", RE::TESWaterForm::FORMTYPE, {
+            RF_INT(TESWaterForm, "Alpha", alpha, std::int8_t),
+            RF_FLAGS(TESWaterForm, "Flags", flags, RE::TESWaterForm::Flag),
+            RF_F(TESWaterForm, "SunSpecularPower", data.sunSpecularPower),
+            RF_F(TESWaterForm, "ReflectionAmount", data.reflectionAmount),
+            RF_F(TESWaterForm, "FresnelAmount", data.fresnelAmount),
+            RF_F(TESWaterForm, "AboveWaterFogDistNear", data.aboveWaterFogDistNear),
+            RF_F(TESWaterForm, "AboveWaterFogDistFar", data.aboveWaterFogDistFar),
+            RF_C3B(TESWaterForm, "ShallowWaterColor", data.shallowWaterColor),
+            RF_C3B(TESWaterForm, "DeepWaterColor", data.deepWaterColor),
+            RF_C3B(TESWaterForm, "ReflectionWaterColor", data.reflectionWaterColor),
+            RF_F(TESWaterForm, "DisplacementSize", data.displacementSize),
+            RF_F(TESWaterForm, "DisplacementForce", data.displacementForce),
+            RF_F(TESWaterForm, "DisplacementVelocity", data.displacementVelocity),
+            RF_F(TESWaterForm, "DisplacementFalloff", data.displacementFalloff),
+            RF_F(TESWaterForm, "DisplacementDampener", data.displacementDampener),
+            RF_F(TESWaterForm, "NoiseFalloff", data.noiseFalloff),
+            RF_F(TESWaterForm, "NoiseWindDirection0", data.noiseWindDirectionA[0]),
+            RF_F(TESWaterForm, "NoiseWindDirection1", data.noiseWindDirectionA[1]),
+            RF_F(TESWaterForm, "NoiseWindDirection2", data.noiseWindDirectionA[2]),
+            RF_F(TESWaterForm, "NoiseWindSpeed0", data.noiseWindSpeedA[0]),
+            RF_F(TESWaterForm, "NoiseWindSpeed1", data.noiseWindSpeedA[1]),
+            RF_F(TESWaterForm, "NoiseWindSpeed2", data.noiseWindSpeedA[2]),
+            RF_F(TESWaterForm, "AboveWaterFogAmount", data.aboveWaterFogAmount),
+            RF_F(TESWaterForm, "UnderwaterFogAmount", data.underwaterFogAmount),
+            RF_F(TESWaterForm, "UnderwaterFogDistNear", data.underwaterFogDistNear),
+            RF_F(TESWaterForm, "UnderwaterFogDistFar", data.underwaterFogDistFar),
+            RF_F(TESWaterForm, "RefractionMagnitude", data.refractionMagnitude),
+            RF_F(TESWaterForm, "SpecularPower", data.specularPower),
+            RF_F(TESWaterForm, "SpecularRadius", data.specularRadius),
+            RF_F(TESWaterForm, "SpecularBrightness", data.specularBrightness),
+            RF_F(TESWaterForm, "UVScale0", data.uvScaleA[0]),
+            RF_F(TESWaterForm, "UVScale1", data.uvScaleA[1]),
+            RF_F(TESWaterForm, "UVScale2", data.uvScaleA[2]),
+            RF_F(TESWaterForm, "AmplitudeScale0", data.amplitudeA[0]),
+            RF_F(TESWaterForm, "AmplitudeScale1", data.amplitudeA[1]),
+            RF_F(TESWaterForm, "AmplitudeScale2", data.amplitudeA[2]),
+            RF_F(TESWaterForm, "ReflectionMagnitude", data.reflectionMagnitude),
+            RF_F(TESWaterForm, "SunSparkleMagnitude", data.sunSparkleMagnitude),
+            RF_F(TESWaterForm, "SunSpecularMagnitude", data.sunSpecularMagnitude),
+            RF_F(TESWaterForm, "DepthReflections", data.depthProperties.reflections),
+            RF_F(TESWaterForm, "DepthRefraction", data.depthProperties.refraction),
+            RF_F(TESWaterForm, "DepthNormals", data.depthProperties.normals),
+            RF_F(TESWaterForm, "DepthSpecularLighting", data.depthProperties.specularLighting),
+            RF_F(TESWaterForm, "SunSparklePower", data.sunSparklePower),
+            RF_F(TESWaterForm, "FlowmapScale", data.flowmapScale),
+            RF_INT(TESWaterForm, "FrequencyX", frequencyX, std::uint32_t),
+            RF_INT(TESWaterForm, "FrequencyY", frequencyY, std::uint32_t),
+            RF_INT(TESWaterForm, "Octaves", octaves, std::int32_t),
+            RF_F(TESWaterForm, "NoiseAmplitude", amplitude),
+            RF_F(TESWaterForm, "NoiseLacunarity", lacunarity),
+            RF_F(TESWaterForm, "NoiseBias", bias),
+            RF_F(TESWaterForm, "NoiseGain", gain),
+            RF_F(TESWaterForm, "LinearVelocityX", linearVelocity.x),
+            RF_F(TESWaterForm, "LinearVelocityY", linearVelocity.y),
+            RF_F(TESWaterForm, "LinearVelocityZ", linearVelocity.z),
+            RF_F(TESWaterForm, "AngularVelocityX", angularVelocity.x),
+            RF_F(TESWaterForm, "AngularVelocityY", angularVelocity.y),
+            RF_F(TESWaterForm, "AngularVelocityZ", angularVelocity.z),
+            RF_S(TESWaterForm, "NoiseTexture0", noiseTextures[0].textureName),
+            RF_S(TESWaterForm, "NoiseTexture1", noiseTextures[1].textureName),
+            RF_S(TESWaterForm, "NoiseTexture2", noiseTextures[2].textureName),
+            RF_S(TESWaterForm, "NoiseTexture3", noiseTextures[3].textureName),
+            RF_LINK(TESWaterForm, "MaterialType", materialType, BGSMaterialType),
+            RF_LINK(TESWaterForm, "WaterSound", waterSound, BGSSoundDescriptorForm),
+            RF_LINK(TESWaterForm, "ContactSpell", contactSpell, SpellItem),
+            RF_LINK(TESWaterForm, "ImageSpace", imageSpace, TESImageSpace),
+        }});
+
+        // EffectShader: fill / edge / particle / color keys / holes / addon
+        // models + texture paths and links. Honest exclusion: the membrane and
+        // particle blend-mode members (D3DBLEND / D3DBLENDOP) are only
+        // forward-declared in CommonLib, so they cannot be reflected.
+        R.push_back(Schema{ "EffectShader", RE::TESEffectShader::FORMTYPE, {
+            RF_C3B(TESEffectShader, "FillColorKey1", data.fillTextureEffectColorKey1),
+            RF_C3B(TESEffectShader, "FillColorKey2", data.fillTextureEffectColorKey2),
+            RF_C3B(TESEffectShader, "FillColorKey3", data.fillTextureEffectColorKey3),
+            RF_F(TESEffectShader, "FillAlphaFadeInTime", data.fillTextureEffectAlphaFadeInTime),
+            RF_F(TESEffectShader, "FillFullAlphaTime", data.fillTextureEffectFullAlphaTime),
+            RF_F(TESEffectShader, "FillAlphaFadeOutTime", data.fillTextureEffectAlphaFadeOutTime),
+            RF_F(TESEffectShader, "FillPersistentAlphaRatio", data.fillTextureEffectPersistentAlphaRatio),
+            RF_F(TESEffectShader, "FillAlphaPulseAmplitude", data.fillTextureEffectAlphaPulseAmplitude),
+            RF_F(TESEffectShader, "FillAlphaPulseFrequency", data.fillTextureEffectAlphaPulseFrequency),
+            RF_F(TESEffectShader, "FillAnimSpeedU", data.fillTextureEffectTextureAnimationSpeedU),
+            RF_F(TESEffectShader, "FillAnimSpeedV", data.fillTextureEffectTextureAnimationSpeedV),
+            RF_F(TESEffectShader, "FillFullAlphaRatio", data.fillTextureEffectFullAlphaRatio),
+            RF_F(TESEffectShader, "FillColorKey1Scale", data.fillTextureEffectColorKeyScaleTimeColorKey1Scale),
+            RF_F(TESEffectShader, "FillColorKey2Scale", data.fillTextureEffectColorKeyScaleTimeColorKey2Scale),
+            RF_F(TESEffectShader, "FillColorKey3Scale", data.fillTextureEffectColorKeyScaleTimeColorKey3Scale),
+            RF_F(TESEffectShader, "FillColorKey1Time", data.fillTextureEffectColorKeyScaleTimeColorKey1Time),
+            RF_F(TESEffectShader, "FillColorKey2Time", data.fillTextureEffectColorKeyScaleTimeColorKey2Time),
+            RF_F(TESEffectShader, "FillColorKey3Time", data.fillTextureEffectColorKeyScaleTimeColorKey3Time),
+            RF_F(TESEffectShader, "FillTextureScaleU", data.fillTextureEffectTextureScaleU),
+            RF_F(TESEffectShader, "FillTextureScaleV", data.fillTextureEffectTextureScaleV),
+            RF_F(TESEffectShader, "EdgeFallOff", data.edgeEffectFallOff),
+            RF_C3B(TESEffectShader, "EdgeEffectColor", data.edgeEffectColor),
+            RF_F(TESEffectShader, "EdgeAlphaFadeInTime", data.edgeEffectAlphaFadeInTime),
+            RF_F(TESEffectShader, "EdgeFullAlphaTime", data.edgeEffectFullAlphaTime),
+            RF_F(TESEffectShader, "EdgeAlphaFadeOutTime", data.edgeEffectAlphaFadeOutTime),
+            RF_F(TESEffectShader, "EdgePersistentAlphaRatio", data.edgeEffectPersistentAlphaRatio),
+            RF_F(TESEffectShader, "EdgeAlphaPulseAmplitude", data.edgeEffectAlphaPulseAmplitude),
+            RF_F(TESEffectShader, "EdgeAlphaPulseFrequency", data.edgeEffectAlphaPulseFrequency),
+            RF_F(TESEffectShader, "EdgeFullAlphaRatio", data.edgeEffectFullAlphaRatio),
+            RF_F(TESEffectShader, "EdgeWidthAlphaUnits", data.edgeWidthAlphaUnits),
+            RF_C3B(TESEffectShader, "EdgeColor", data.edgeColor),
+            RF_F(TESEffectShader, "ParticleBirthRampUpTime", data.particleShaderParticleBirthRampUpTime),
+            RF_F(TESEffectShader, "ParticleFullBirthTime", data.particleShaderFullParticleBirthTime),
+            RF_F(TESEffectShader, "ParticleBirthRampDownTime", data.particleShaderParticleBirthRampDownTime),
+            RF_F(TESEffectShader, "ParticleFullBirthRatio", data.particleShaderFullParticleBirthRatio),
+            RF_F(TESEffectShader, "ParticlePersistentCount", data.particleShaderPersistantParticleCount),
+            RF_F(TESEffectShader, "ParticleLifetime", data.particleShaderParticleLifetime),
+            RF_F(TESEffectShader, "ParticleLifetimeVariance", data.particleShaderParticleLifetimeVariance),
+            RF_F(TESEffectShader, "ParticleSpeedAlongNormal", data.particleShaderInitialSpeedAlongNormal),
+            RF_F(TESEffectShader, "ParticleAccelAlongNormal", data.particleShaderAccelerationAlongNormal),
+            RF_F(TESEffectShader, "ParticleInitialVelocity1", data.particleShaderInitialVelocity1),
+            RF_F(TESEffectShader, "ParticleInitialVelocity2", data.particleShaderInitialVelocity2),
+            RF_F(TESEffectShader, "ParticleInitialVelocity3", data.particleShaderInitialVelocity3),
+            RF_F(TESEffectShader, "ParticleAcceleration1", data.particleShaderAcceleration1),
+            RF_F(TESEffectShader, "ParticleAcceleration2", data.particleShaderAcceleration2),
+            RF_F(TESEffectShader, "ParticleAcceleration3", data.particleShaderAcceleration3),
+            RF_F(TESEffectShader, "ParticleScaleKey1", data.particleShaderScaleKey1),
+            RF_F(TESEffectShader, "ParticleScaleKey2", data.particleShaderScaleKey2),
+            RF_F(TESEffectShader, "ParticleScaleKey1Time", data.particleShaderScaleKey1Time),
+            RF_F(TESEffectShader, "ParticleScaleKey2Time", data.particleShaderScaleKey2Time),
+            RF_F(TESEffectShader, "ParticleSpeedNormalVariance", data.particleShaderInitialSpeedAlongNormalVariance),
+            RF_F(TESEffectShader, "ParticleInitialRotation", data.particleShaderInitialRotation),
+            RF_F(TESEffectShader, "ParticleRotationVariance", data.particleShaderInitialRotationVariance),
+            RF_F(TESEffectShader, "ParticleRotationSpeed", data.particleShaderRotationSpeed),
+            RF_F(TESEffectShader, "ParticleRotationSpeedVariance", data.particleShaderRotationSpeedVariance),
+            RF_F(TESEffectShader, "ParticleAnimStartFrame", data.particleShaderAnimatedStartFrame),
+            RF_F(TESEffectShader, "ParticleAnimStartFrameVariance", data.particleShaderAnimatedStartFrameVariance),
+            RF_F(TESEffectShader, "ParticleAnimEndFrame", data.particleShaderAnimatedEndFrame),
+            RF_F(TESEffectShader, "ParticleAnimLoopStartFrame", data.particleShaderAnimatedLoopStartFrame),
+            RF_F(TESEffectShader, "ParticleAnimLoopStartVariance", data.particleShaderAnimatedLoopStartVariance),
+            RF_F(TESEffectShader, "ParticleAnimFrameCount", data.particleShaderAnimatedFrameCount),
+            RF_F(TESEffectShader, "ParticleAnimFrameCountVariance", data.particleShaderAnimatedFrameCountVariance),
+            RF_C3B(TESEffectShader, "ColorKey1", data.colorKey1),
+            RF_C3B(TESEffectShader, "ColorKey2", data.colorKey2),
+            RF_C3B(TESEffectShader, "ColorKey3", data.colorKey3),
+            RF_F(TESEffectShader, "ColorKey1Alpha", data.colorKey1ColorAlpha),
+            RF_F(TESEffectShader, "ColorKey2Alpha", data.colorKey2ColorAlpha),
+            RF_F(TESEffectShader, "ColorKey3Alpha", data.colorKey3ColorAlpha),
+            RF_F(TESEffectShader, "ColorKey1Time", data.colorKey1ColorKeyTime),
+            RF_F(TESEffectShader, "ColorKey2Time", data.colorKey2ColorKeyTime),
+            RF_F(TESEffectShader, "ColorKey3Time", data.colorKey3ColorKeyTime),
+            RF_F(TESEffectShader, "HolesStartTime", data.holesStartTime),
+            RF_F(TESEffectShader, "HolesEndTime", data.holesEndTime),
+            RF_F(TESEffectShader, "HolesStartVal", data.holesStartVal),
+            RF_F(TESEffectShader, "HolesEndVal", data.holesEndVal),
+            RF_F(TESEffectShader, "ExplosionWindSpeed", data.explosionWindSpeed),
+            RF_F(TESEffectShader, "TextureCountU", data.textureCountU),
+            RF_F(TESEffectShader, "TextureCountV", data.textureCountV),
+            RF_F(TESEffectShader, "AddonFadeInTime", data.addonModelsFadeInTime),
+            RF_F(TESEffectShader, "AddonFadeOutTime", data.addonModelsFadeOutTime),
+            RF_F(TESEffectShader, "AddonScaleStart", data.addonModelsScaleStart),
+            RF_F(TESEffectShader, "AddonScaleEnd", data.addonModelsScaleEnd),
+            RF_F(TESEffectShader, "AddonScaleInTime", data.addonModelsScaleInTime),
+            RF_F(TESEffectShader, "AddonScaleOutTime", data.addonModelsScaleOutTime),
+            RF_F(TESEffectShader, "ColorScale", data.colorScale),
+            RF_F(TESEffectShader, "BirthPositionOffset", data.birthPositionOffset),
+            RF_F(TESEffectShader, "BirthPositionOffsetVariance", data.birthPositionOffsetVariance),
+            RF_FLAGS(TESEffectShader, "Flags", data.flags, RE::EffectShaderData::Flags),
+            RF_LINK(TESEffectShader, "AddonModels", data.addonModels, BGSDebris),
+            RF_LINK(TESEffectShader, "AmbientSound", data.ambientSound, BGSSoundDescriptorForm),
+            RF_S(TESEffectShader, "FillTexture", fillTexture.textureName),
+            RF_S(TESEffectShader, "ParticleTexture", particleShaderTexture.textureName),
+            RF_S(TESEffectShader, "HolesTexture", holesTexture.textureName),
+            RF_S(TESEffectShader, "MembranePalette", membranePaletteTexture.textureName),
+            RF_S(TESEffectShader, "ParticlePalette", particlePaletteTexture.textureName),
+        }});
+
+        // ImageSpaceModifier: the DNAM value block. The float mult/add pairs
+        // are first-class; the fields CommonLib types as raw uint32 (tint,
+        // blur, radial blur, DoF) are exposed as raw Ints, not lossy-decoded.
+        R.push_back(Schema{ "ImageSpaceModifier", RE::TESImageSpaceModifier::FORMTYPE, {
+            RF_B(TESImageSpaceModifier, "Animatable", data.animatable),
+            RF_F(TESImageSpaceModifier, "Duration", data.duration),
+            RF_F(TESImageSpaceModifier, "EyeAdaptSpeedMult", data.hdr.eyeAdaptSpeed.mult),
+            RF_F(TESImageSpaceModifier, "EyeAdaptSpeedAdd", data.hdr.eyeAdaptSpeed.add),
+            RF_F(TESImageSpaceModifier, "BloomBlurRadiusMult", data.hdr.bloomBlurRadius.mult),
+            RF_F(TESImageSpaceModifier, "BloomBlurRadiusAdd", data.hdr.bloomBlurRadius.add),
+            RF_F(TESImageSpaceModifier, "BloomThresholdMult", data.hdr.bloomThreshold.mult),
+            RF_F(TESImageSpaceModifier, "BloomThresholdAdd", data.hdr.bloomThreshold.add),
+            RF_F(TESImageSpaceModifier, "BloomScaleMult", data.hdr.bloomScale.mult),
+            RF_F(TESImageSpaceModifier, "BloomScaleAdd", data.hdr.bloomScale.add),
+            RF_F(TESImageSpaceModifier, "TargetLumMinMult", data.hdr.targetLum.min.mult),
+            RF_F(TESImageSpaceModifier, "TargetLumMinAdd", data.hdr.targetLum.min.add),
+            RF_F(TESImageSpaceModifier, "TargetLumMaxMult", data.hdr.targetLum.max.mult),
+            RF_F(TESImageSpaceModifier, "TargetLumMaxAdd", data.hdr.targetLum.max.add),
+            RF_F(TESImageSpaceModifier, "SunlightScaleMult", data.hdr.sunlightScale.mult),
+            RF_F(TESImageSpaceModifier, "SunlightScaleAdd", data.hdr.sunlightScale.add),
+            RF_F(TESImageSpaceModifier, "SkyScaleMult", data.hdr.skyScale.mult),
+            RF_F(TESImageSpaceModifier, "SkyScaleAdd", data.hdr.skyScale.add),
+            RF_F(TESImageSpaceModifier, "SaturationMult", data.cinematic.saturation.mult),
+            RF_F(TESImageSpaceModifier, "SaturationAdd", data.cinematic.saturation.add),
+            RF_F(TESImageSpaceModifier, "BrightnessMult", data.cinematic.brightness.mult),
+            RF_F(TESImageSpaceModifier, "BrightnessAdd", data.cinematic.brightness.add),
+            RF_F(TESImageSpaceModifier, "ContrastMult", data.cinematic.contrast.mult),
+            RF_F(TESImageSpaceModifier, "ContrastAdd", data.cinematic.contrast.add),
+            RF_INT(TESImageSpaceModifier, "TintColorRaw", data.tintColor, std::uint32_t),
+            RF_INT(TESImageSpaceModifier, "BlurRadiusRaw", data.blurRadius, std::uint32_t),
+            RF_INT(TESImageSpaceModifier, "DoubleVisionRaw", data.doubleVisionStrength, std::uint32_t),
+            RF_INT(TESImageSpaceModifier, "RadialBlurStrengthRaw", data.radialBlurStrength, std::uint32_t),
+            RF_INT(TESImageSpaceModifier, "RadialBlurRampUpRaw", data.radialBlurRampUp, std::uint32_t),
+            RF_INT(TESImageSpaceModifier, "RadialBlurStartRaw", data.radialBlurStart, std::uint32_t),
+            RF_INT(TESImageSpaceModifier, "RadialBlurRampDownRaw", data.radialBlurRampDown, std::uint32_t),
+            RF_INT(TESImageSpaceModifier, "RadialBlurDownStartRaw", data.radialBlurDownStart, std::uint32_t),
+            RF_B(TESImageSpaceModifier, "UseTargetForRadialBlur", data.useTargetForRadialBlur),
+            RF_F(TESImageSpaceModifier, "RadialBlurCenterX", data.radialBlurCenter.x),
+            RF_F(TESImageSpaceModifier, "RadialBlurCenterY", data.radialBlurCenter.y),
+            RF_INT(TESImageSpaceModifier, "DofStrengthRaw", data.dof.strength, std::uint32_t),
+            RF_INT(TESImageSpaceModifier, "DofDistanceRaw", data.dof.distance, std::uint32_t),
+            RF_INT(TESImageSpaceModifier, "DofRangeRaw", data.dof.range, std::uint32_t),
+            RF_B(TESImageSpaceModifier, "DofUseTarget", data.dof.useTarget),
+            RF_INT(TESImageSpaceModifier, "FadeColorRaw", data.fadeColor, std::uint32_t),
+            RF_INT(TESImageSpaceModifier, "MotionBlurRaw", data.motionBlurStrength, std::uint32_t),
+        }});
+
+        // WorldSpace: climate/water/lighting links, map framing, LOD + land
+        // heights. Runtime containers (cell maps, ref maps) are derived state
+        // and stay outside the schema by design.
+        R.push_back(Schema{ "WorldSpace", RE::TESWorldSpace::FORMTYPE, {
+            RF_LINK(TESWorldSpace, "Climate", climate, TESClimate),
+            RF_LINK(TESWorldSpace, "ParentWorld", parentWorld, TESWorldSpace),
+            RF_LINK(TESWorldSpace, "LightingTemplate", lightingTemplate, BGSLightingTemplate),
+            RF_LINK(TESWorldSpace, "WorldWater", worldWater, TESWaterForm),
+            RF_LINK(TESWorldSpace, "LodWater", lodWater, TESWaterForm),
+            RF_LINK(TESWorldSpace, "MusicType", musicType, BGSMusicType),
+            RF_LINK(TESWorldSpace, "EncounterZone", encounterZone, BGSEncounterZone),
+            RF_LINK(TESWorldSpace, "Location", location, BGSLocation),
+            RF_F(TESWorldSpace, "LodWaterHeight", lodWaterHeight),
+            RF_F(TESWorldSpace, "DefaultLandHeight", defaultLandHeight),
+            RF_F(TESWorldSpace, "DefaultWaterHeight", defaultWaterHeight),
+            RF_F(TESWorldSpace, "DistantLODMult", distantLODMult),
+            RF_F(TESWorldSpace, "NorthRotation", northRotation),
+            RF_FLAGS(TESWorldSpace, "Flags", flags, RE::TESWorldSpace::Flag),
+            RF_FLAGS(TESWorldSpace, "ParentUseFlags", parentUseFlags, RE::TESWorldSpace::ParentUseFlag),
+            RF_INT(TESWorldSpace, "MapUsableWidth", worldMapData.usableWidth, std::uint32_t),
+            RF_INT(TESWorldSpace, "MapUsableHeight", worldMapData.usableHeight, std::uint32_t),
+            RF_INT(TESWorldSpace, "MapNWCellX", worldMapData.nwCellX, std::int16_t),
+            RF_INT(TESWorldSpace, "MapNWCellY", worldMapData.nwCellY, std::int16_t),
+            RF_INT(TESWorldSpace, "MapSECellX", worldMapData.seCellX, std::int16_t),
+            RF_INT(TESWorldSpace, "MapSECellY", worldMapData.seCellY, std::int16_t),
+            RF_F(TESWorldSpace, "MapScale", worldMapOffsetData.mapScale),
+            RF_F(TESWorldSpace, "MapOffsetX", worldMapOffsetData.mapOffsetX),
+            RF_F(TESWorldSpace, "MapOffsetY", worldMapOffsetData.mapOffsetY),
+            RF_F(TESWorldSpace, "MapOffsetZ", worldMapOffsetData.mapOffsetZ),
+            RF_F(TESWorldSpace, "MinCoordsX", minimumCoords.x),
+            RF_F(TESWorldSpace, "MinCoordsY", minimumCoords.y),
+            RF_F(TESWorldSpace, "MaxCoordsX", maximumCoords.x),
+            RF_F(TESWorldSpace, "MaxCoordsY", maximumCoords.y),
+            RF_S(TESWorldSpace, "CanopyShadowTexture", canopyShadowTexture.textureName),
+            RF_S(TESWorldSpace, "WaterEnvMap", waterEnvMap.textureName),
+        }});
+
         SKSE::log::info("EngineReflect: {} schemas registered", R.size());
+    }
+
+    // ── Discovery ────────────────────────────────────────────────────────
+    static const char* KindName(Value::Kind k)
+    {
+        switch (k) {
+        case Value::Kind::Float:    return "float";
+        case Value::Kind::Int:      return "int";
+        case Value::Kind::Bool:     return "bool";
+        case Value::Kind::Color3:   return "color3";
+        case Value::Kind::Color4:   return "color4";
+        case Value::Kind::FormLink: return "formlink";
+        case Value::Kind::String:   return "string";
+        }
+        return "?";
+    }
+
+    std::string ListSchemas()
+    {
+        std::ostringstream o;
+        for (auto& s : Registry())
+            o << s.name << "  (form type " << static_cast<int>(s.formType)
+              << ", " << s.fields.size() << " fields)\n";
+        return o.str();
+    }
+
+    std::string DescribeSchema(const Schema& s)
+    {
+        std::ostringstream o;
+        o << "[" << s.name << "]  " << s.fields.size() << " fields\n";
+        for (auto& f : s.fields) o << "  " << f.name << " : " << KindName(f.kind) << "\n";
+        return o.str();
     }
 
     // ── Core ops ─────────────────────────────────────────────────────────
@@ -421,6 +753,32 @@ namespace SB::Reflect
         for (std::size_t i = 0; i < a.size(); ++i) {
             if (a[i].first != b[i].first || !a[i].second.ApproxEquals(b[i].second)) {
                 r.detail = "round-trip mismatch at field '" + a[i].first + "'";
+                return r;
+            }
+        }
+        r.ok = true;
+        return r;
+    }
+
+    VerifyResult VerifyStrict(RE::FormID id)
+    {
+        // Read -> Write the same values back -> Read again. Witnesses that the
+        // setters are idempotent for the record's live values (get/set agree).
+        // This MUTATES the form, which is why it is not the default Verify.
+        VerifyResult r;
+        auto* form = RE::TESForm::LookupByID(id);
+        if (!form) { r.detail = "form not found"; return r; }
+        auto* s = SchemaFor(form->GetFormType());
+        if (!s) { r.detail = "no schema for this form type"; return r; }
+
+        Tree a = Read(form);
+        int written = Write(form, a);
+        Tree b = Read(form);
+        r.fields = written;
+        if (a.size() != b.size()) { r.detail = "field count changed across write-back"; return r; }
+        for (std::size_t i = 0; i < a.size(); ++i) {
+            if (a[i].first != b[i].first || !a[i].second.ApproxEquals(b[i].second)) {
+                r.detail = "write-back not idempotent at field '" + a[i].first + "'";
                 return r;
             }
         }

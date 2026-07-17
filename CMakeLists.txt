@@ -48,6 +48,7 @@ add_commonlibsse_plugin(
 
         # Native foreign-format texture codec (non-.dds asset integration)
         src/core/TextureCodec.cpp
+        src/core/Inflate.cpp
 
         # Core trackers (domains 1-10)
         src/core/CelestialTracker.cpp

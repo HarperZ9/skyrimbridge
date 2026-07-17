@@ -228,10 +228,49 @@ namespace SB::PapyrusBridge
         return r.ok ? r.fields : 0;
     }
 
+    static int32_t EngineReflectVerifyStrict(RE::StaticFunctionTag*, int32_t a_formID)
+    {
+        // Opt-in: writes every schema field back with its current value.
+        auto r = Reflect::VerifyStrict(static_cast<RE::FormID>(a_formID));
+        if (r.ok)
+            SKSE::log::info("EngineReflect: 0x{:08X} strict-verified: write-back idempotent ({} fields)", a_formID, r.fields);
+        else
+            SKSE::log::warn("EngineReflect: 0x{:08X} strict verify FAILED: {}", a_formID, r.detail);
+        return r.ok ? r.fields : 0;
+    }
+
+    // cgf "SkyrimBridge.EngineReflectList" 0    -> all schemas (log + file)
+    // cgf "SkyrimBridge.EngineReflectList" 0x<id> -> that form's schema fields
+    static int32_t EngineReflectList(RE::StaticFunctionTag*, int32_t a_formID)
+    {
+        std::string text;
+        std::string label;
+        if (a_formID == 0) {
+            text = Reflect::ListSchemas();
+            label = "schemas";
+        } else {
+            auto* form = RE::TESForm::LookupByID(static_cast<RE::FormID>(a_formID));
+            if (!form) { SKSE::log::warn("EngineReflect: 0x{:08X} does not resolve", a_formID); return 0; }
+            auto* s = Reflect::SchemaFor(form->GetFormType());
+            if (!s) { SKSE::log::warn("EngineReflect: no schema for form type of 0x{:08X}", a_formID); return 0; }
+            text = Reflect::DescribeSchema(*s);
+            label = s->name;
+        }
+        std::error_code ec;
+        std::filesystem::create_directories(kReflectDumpDir, ec);
+        std::string path = std::string(kReflectDumpDir) + "/schema-" + label + ".txt";
+        std::ofstream out(path);
+        if (out) out << text;
+        SKSE::log::info("EngineReflect: {} ->\n{}", path, text);
+        int32_t lines = 0;
+        for (char c : text) if (c == '\n') ++lines;
+        return lines;
+    }
+
     // ── Texture codec native (non-.dds asset integration) ────────────────
-    // cgf "SkyrimBridge.ConvertTexture" "in.tga" "out.dds"  (paths game-relative
-    // or absolute). Decodes TGA/BMP and writes an uncompressed DDS the engine
-    // accepts. PNG is not yet supported (needs an inflate stage).
+    // cgf "SkyrimBridge.ConvertTexture" "in.png" "out.dds"  (paths game-relative
+    // or absolute). Decodes PNG/TGA/BMP and writes a mipmapped uncompressed
+    // DDS the engine accepts.
 
     static bool ConvertTexture(RE::StaticFunctionTag*, RE::BSFixedString a_in, RE::BSFixedString a_out)
     {
@@ -272,13 +311,15 @@ namespace SB::PapyrusBridge
         vm->RegisterFunction("KreateProfileNameAt", "SkyrimBridge", KreateProfileNameAt);
         vm->RegisterFunction("ActiveKreateProfile", "SkyrimBridge", ActiveKreateProfile);
 
-        vm->RegisterFunction("EngineReflectDump",   "SkyrimBridge", EngineReflectDump);
-        vm->RegisterFunction("EngineReflectApply",  "SkyrimBridge", EngineReflectApply);
-        vm->RegisterFunction("EngineReflectVerify", "SkyrimBridge", EngineReflectVerify);
+        vm->RegisterFunction("EngineReflectDump",         "SkyrimBridge", EngineReflectDump);
+        vm->RegisterFunction("EngineReflectApply",        "SkyrimBridge", EngineReflectApply);
+        vm->RegisterFunction("EngineReflectVerify",       "SkyrimBridge", EngineReflectVerify);
+        vm->RegisterFunction("EngineReflectVerifyStrict", "SkyrimBridge", EngineReflectVerifyStrict);
+        vm->RegisterFunction("EngineReflectList",         "SkyrimBridge", EngineReflectList);
 
         vm->RegisterFunction("ConvertTexture",      "SkyrimBridge", ConvertTexture);
 
-        SKSE::log::info("PapyrusBridge: registered 23 native functions under 'SkyrimBridge'");
+        SKSE::log::info("PapyrusBridge: registered 25 native functions under 'SkyrimBridge'");
         return true;
     }
 }

@@ -8,10 +8,12 @@
 //  fully unit-testable offline; the runtime D3D11 texture-substitution hook and
 //  an offline batch converter both sit on top of this core.
 //
-//  Supported now: TGA (uncompressed + RLE, 24/32-bit), BMP (24/32-bit), DDS
-//  header read + uncompressed DDS write.
-//  Honest nulls (not faked): PNG decode needs a DEFLATE/inflate stage; BCn
-//  block compression on write. Both are separate follow-ups.
+//  Supported now: TGA (uncompressed + RLE, 24/32-bit), BMP (24/32-bit), PNG
+//  (all five color types, 1/2/4/8/16-bit, Adam7 interlace, tRNS; 16-bit
+//  narrows to 8 via high byte), DDS header read + uncompressed DDS write with
+//  optional box-filter mipmaps.
+//  Honest nulls (not faked): BCn block compression on write; the runtime
+//  texture-load substitution hook. Both are separate follow-ups.
 //
 //  Author: Zain Dana Harper
 //  License: MIT
@@ -53,16 +55,19 @@ namespace SB::TexCodec
     // Decoders. Return an Image with valid=false on failure/unsupported.
     Image DecodeTGA(const std::uint8_t* data, std::size_t len);
     Image DecodeBMP(const std::uint8_t* data, std::size_t len);
+    Image DecodePNG(const std::uint8_t* data, std::size_t len);
     Image Decode(const std::uint8_t* data, std::size_t len);          // dispatch by magic
     Image DecodeFile(const std::filesystem::path& path);
 
     DDSInfo ReadDDSHeader(const std::uint8_t* data, std::size_t len);
 
-    // Encode an RGBA image as an uncompressed R8G8B8A8_UNORM DDS (single mip).
-    std::vector<std::uint8_t> EncodeDDS_RGBA(const Image& img);
-    bool WriteDDS(const std::filesystem::path& out, const Image& img);
+    // Encode an RGBA image as an uncompressed R8G8B8A8_UNORM DDS. With
+    // mipmaps, a clamp-edge 2x2 box-filter chain down to 1x1 is appended and
+    // the header carries the mip count. Default (false) matches the original
+    // single-mip byte layout.
+    std::vector<std::uint8_t> EncodeDDS_RGBA(const Image& img, bool mipmaps = false);
+    bool WriteDDS(const std::filesystem::path& out, const Image& img, bool mipmaps = true);
 
-    // Convenience: decode any supported file -> write a DDS. Returns false on
-    // an unsupported/failed decode (PNG currently returns false).
+    // Convenience: decode any supported file -> write a DDS (mipmapped).
     bool ConvertToDDS(const std::filesystem::path& in, const std::filesystem::path& out);
 }

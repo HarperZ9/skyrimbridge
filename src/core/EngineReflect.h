@@ -84,10 +84,19 @@ namespace SB::Reflect
     std::string ToINI(const Schema& s, RE::FormID id, const Tree& t);
     Tree        FromINI(const Schema& s, const std::string& text);
 
+    // ── Discovery ────────────────────────────────────────────────────────
+    std::string ListSchemas();                          // one line per schema: name, form type, field count
+    std::string DescribeSchema(const Schema& s);        // field name + kind, one per line
+
     // ── High level (FormID driven) ───────────────────────────────────────
     std::string Dump(RE::FormID id);                    // "" if no schema/form
     int         Apply(RE::FormID id, const std::string& text);
 
     struct VerifyResult { bool ok = false; int fields = 0; std::string detail; };
     VerifyResult Verify(RE::FormID id);                 // Read -> INI -> Read == Read (witnessed)
+
+    // Strict mode: Read -> Write back -> Read, compare. MUTATES the form (it
+    // rewrites every schema field with its own current value), so it is a
+    // separate, explicitly opted-into op and never the default Verify.
+    VerifyResult VerifyStrict(RE::FormID id);
 }

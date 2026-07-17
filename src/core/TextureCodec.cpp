@@ -3,6 +3,7 @@
 //=============================================================================
 
 #include "TextureCodec.h"
+#include "Inflate.h"
 
 #include <cstring>
 #include <fstream>
@@ -134,11 +135,249 @@ namespace SB::TexCodec
         return img;
     }
 
+    // ── PNG (W3C spec; zlib/DEFLATE via SB::Inflate) ─────────────────────
+    namespace
+    {
+        struct PNGInfo
+        {
+            std::uint32_t w = 0, h = 0;
+            std::uint8_t  depth = 0, colorType = 0, interlace = 0;
+            std::vector<std::uint8_t> palette;    // RGB triples (PLTE)
+            std::vector<std::uint8_t> palAlpha;   // per-index alpha (tRNS)
+            std::int32_t trnsGray = -1;           // colorkey sample, -1 = none
+            std::int32_t trnsR = -1, trnsG = -1, trnsB = -1;
+
+            int Channels() const
+            {
+                switch (colorType) {
+                case 0: return 1; case 2: return 3; case 3: return 1;
+                case 4: return 2; case 6: return 4;
+                }
+                return 0;
+            }
+        };
+
+        std::uint32_t be32(const std::uint8_t* p)
+        {
+            return (static_cast<std::uint32_t>(p[0]) << 24) | (static_cast<std::uint32_t>(p[1]) << 16) |
+                   (static_cast<std::uint32_t>(p[2]) << 8) | static_cast<std::uint32_t>(p[3]);
+        }
+
+        // idx-th sample of a packed row, MSB-first within each byte (depth <= 8).
+        std::uint32_t GetBits(const std::uint8_t* raw, std::uint32_t idx, int depth)
+        {
+            std::uint32_t bit = idx * static_cast<std::uint32_t>(depth);
+            int shift = 8 - depth - static_cast<int>(bit & 7);
+            return (raw[bit >> 3] >> shift) & ((1u << depth) - 1);
+        }
+
+        std::uint8_t Scale8(std::uint32_t v, int depth)   // exact for 1/2/4/8
+        {
+            switch (depth) { case 1: return static_cast<std::uint8_t>(v * 255);
+                             case 2: return static_cast<std::uint8_t>(v * 85);
+                             case 4: return static_cast<std::uint8_t>(v * 17); }
+            return static_cast<std::uint8_t>(v);
+        }
+
+        int Paeth(int a, int b, int c)
+        {
+            int p = a + b - c;
+            int pa = p > a ? p - a : a - p;
+            int pb = p > b ? p - b : b - p;
+            int pc = p > c ? p - c : c - p;
+            if (pa <= pb && pa <= pc) return a;
+            if (pb <= pc) return b;
+            return c;
+        }
+
+        bool UnfilterRow(std::uint8_t f, std::uint8_t* r, const std::uint8_t* prior,
+                         std::size_t n, int bpp)
+        {
+            switch (f) {
+            case 0: return true;
+            case 1:
+                for (std::size_t i = bpp; i < n; ++i) r[i] = static_cast<std::uint8_t>(r[i] + r[i - bpp]);
+                return true;
+            case 2:
+                if (prior) for (std::size_t i = 0; i < n; ++i) r[i] = static_cast<std::uint8_t>(r[i] + prior[i]);
+                return true;
+            case 3:
+                for (std::size_t i = 0; i < n; ++i) {
+                    int a = i >= static_cast<std::size_t>(bpp) ? r[i - bpp] : 0;
+                    int b = prior ? prior[i] : 0;
+                    r[i] = static_cast<std::uint8_t>(r[i] + ((a + b) >> 1));
+                }
+                return true;
+            case 4:
+                for (std::size_t i = 0; i < n; ++i) {
+                    int a = i >= static_cast<std::size_t>(bpp) ? r[i - bpp] : 0;
+                    int b = prior ? prior[i] : 0;
+                    int c = (prior && i >= static_cast<std::size_t>(bpp)) ? prior[i - bpp] : 0;
+                    r[i] = static_cast<std::uint8_t>(r[i] + Paeth(a, b, c));
+                }
+                return true;
+            }
+            return false;
+        }
+
+        // Defiltered raw row (pw pixels) -> RGBA at output row y, columns
+        // x0, x0+dx, ... (dx=1 for non-interlaced; Adam7 pass geometry else).
+        void ExpandRow(const PNGInfo& in, const std::uint8_t* raw, std::uint32_t pw,
+                       std::uint8_t* out, std::uint32_t W, std::uint32_t y,
+                       std::uint32_t x0, std::uint32_t dx)
+        {
+            const int d = in.depth;
+            for (std::uint32_t i = 0; i < pw; ++i) {
+                std::uint8_t R = 0, G = 0, B = 0, A = 255;
+                switch (in.colorType) {
+                case 0: {   // grayscale (1/2/4/8/16)
+                    std::uint32_t v = (d == 16) ? ((raw[i * 2] << 8) | raw[i * 2 + 1]) : GetBits(raw, i, d);
+                    R = G = B = (d == 16) ? raw[i * 2] : Scale8(v, d);
+                    if (in.trnsGray >= 0 && v == static_cast<std::uint32_t>(in.trnsGray)) A = 0;
+                    break; }
+                case 2: {   // RGB (8/16)
+                    std::uint32_t r, g, b;
+                    if (d == 16) { r = (raw[i*6] << 8) | raw[i*6+1]; g = (raw[i*6+2] << 8) | raw[i*6+3]; b = (raw[i*6+4] << 8) | raw[i*6+5];
+                                   R = raw[i*6]; G = raw[i*6+2]; B = raw[i*6+4]; }
+                    else         { r = raw[i*3]; g = raw[i*3+1]; b = raw[i*3+2]; R = static_cast<std::uint8_t>(r); G = static_cast<std::uint8_t>(g); B = static_cast<std::uint8_t>(b); }
+                    if (in.trnsR >= 0 && r == static_cast<std::uint32_t>(in.trnsR) &&
+                        g == static_cast<std::uint32_t>(in.trnsG) && b == static_cast<std::uint32_t>(in.trnsB)) A = 0;
+                    break; }
+                case 3: {   // palette (1/2/4/8)
+                    std::uint32_t idx = GetBits(raw, i, d);
+                    if (idx * 3 + 2 < in.palette.size()) {
+                        R = in.palette[idx * 3]; G = in.palette[idx * 3 + 1]; B = in.palette[idx * 3 + 2];
+                    }
+                    if (idx < in.palAlpha.size()) A = in.palAlpha[idx];
+                    break; }
+                case 4: {   // gray + alpha (8/16)
+                    if (d == 16) { R = G = B = raw[i * 4]; A = raw[i * 4 + 2]; }
+                    else         { R = G = B = raw[i * 2]; A = raw[i * 2 + 1]; }
+                    break; }
+                case 6: {   // RGBA (8/16)
+                    if (d == 16) { R = raw[i*8]; G = raw[i*8+2]; B = raw[i*8+4]; A = raw[i*8+6]; }
+                    else         { R = raw[i*4]; G = raw[i*4+1]; B = raw[i*4+2]; A = raw[i*4+3]; }
+                    break; }
+                }
+                std::size_t o = (static_cast<std::size_t>(y) * W + x0 + static_cast<std::size_t>(i) * dx) * 4;
+                out[o] = R; out[o + 1] = G; out[o + 2] = B; out[o + 3] = A;
+            }
+        }
+
+        bool ValidDepth(std::uint8_t ct, std::uint8_t d)
+        {
+            switch (ct) {
+            case 0: return d == 1 || d == 2 || d == 4 || d == 8 || d == 16;
+            case 3: return d == 1 || d == 2 || d == 4 || d == 8;
+            case 2: case 4: case 6: return d == 8 || d == 16;
+            }
+            return false;
+        }
+    }
+
+    Image DecodePNG(const std::uint8_t* d, std::size_t len)
+    {
+        Image img;
+        static const std::uint8_t SIG[8] = { 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A };
+        if (len < 8 + 12 || std::memcmp(d, SIG, 8) != 0) return img;
+
+        // Chunk walk. Every CRC is verified; unknown CRITICAL chunks fail
+        // loudly (ancillary ones are skipped, per spec).
+        PNGInfo info;
+        std::vector<std::uint8_t> idat;
+        bool haveIHDR = false, haveIEND = false;
+        std::size_t pos = 8;
+        while (pos + 12 <= len && !haveIEND) {
+            std::uint32_t clen = be32(d + pos);
+            if (clen > len || pos + 12 + clen > len) return img;
+            const std::uint8_t* type = d + pos + 4;
+            const std::uint8_t* body = d + pos + 8;
+            if (Inflate::Crc32(type, 4 + clen) != be32(body + clen)) return img;
+
+            if (!std::memcmp(type, "IHDR", 4)) {
+                if (haveIHDR || clen != 13) return img;
+                info.w = be32(body); info.h = be32(body + 4);
+                info.depth = body[8]; info.colorType = body[9];
+                info.interlace = body[12];
+                if (body[10] != 0 || body[11] != 0 || info.interlace > 1) return img;
+                if (!info.w || !info.h || !ValidDepth(info.colorType, info.depth)) return img;
+                if (static_cast<std::uint64_t>(info.w) * info.h > (1ull << 26)) return img;   // 67M px cap
+                haveIHDR = true;
+            } else if (!std::memcmp(type, "PLTE", 4)) {
+                if (!haveIHDR || clen % 3 || clen > 768) return img;
+                info.palette.assign(body, body + clen);
+            } else if (!std::memcmp(type, "tRNS", 4)) {
+                if (!haveIHDR) return img;
+                if (info.colorType == 3)      info.palAlpha.assign(body, body + clen);
+                else if (info.colorType == 0 && clen >= 2) info.trnsGray = (body[0] << 8) | body[1];
+                else if (info.colorType == 2 && clen >= 6) {
+                    info.trnsR = (body[0] << 8) | body[1];
+                    info.trnsG = (body[2] << 8) | body[3];
+                    info.trnsB = (body[4] << 8) | body[5];
+                }
+            } else if (!std::memcmp(type, "IDAT", 4)) {
+                if (!haveIHDR) return img;
+                idat.insert(idat.end(), body, body + clen);
+            } else if (!std::memcmp(type, "IEND", 4)) {
+                haveIEND = true;
+            } else if (!(type[0] & 0x20)) {
+                return img;                        // unknown critical chunk
+            }
+            pos += 12 + clen;
+        }
+        if (!haveIHDR || !haveIEND || idat.empty()) return img;
+        if (info.colorType == 3 && info.palette.empty()) return img;
+
+        // Pass geometry: one full pass, or the seven Adam7 sub-images.
+        struct Pass { std::uint32_t x0, y0, dx, dy; };
+        static const Pass ADAM7[7] = { {0,0,8,8}, {4,0,8,8}, {0,4,4,8}, {2,0,4,4},
+                                       {0,2,2,4}, {1,0,2,2}, {0,1,1,2} };
+        const Pass single = { 0, 0, 1, 1 };
+        const Pass* passes = info.interlace ? ADAM7 : &single;
+        const int nPasses = info.interlace ? 7 : 1;
+        const int ch = info.Channels();
+        const int bpp = (ch * info.depth + 7) / 8;
+
+        // Exact expected size of the decompressed scanline stream.
+        std::size_t expect = 0;
+        for (int p = 0; p < nPasses; ++p) {
+            std::uint32_t pw = info.w > passes[p].x0 ? (info.w - passes[p].x0 + passes[p].dx - 1) / passes[p].dx : 0;
+            std::uint32_t ph = info.h > passes[p].y0 ? (info.h - passes[p].y0 + passes[p].dy - 1) / passes[p].dy : 0;
+            if (pw && ph)
+                expect += static_cast<std::size_t>(ph) * (1 + (static_cast<std::size_t>(pw) * ch * info.depth + 7) / 8);
+        }
+
+        std::vector<std::uint8_t> raw;
+        if (!Inflate::InflateZlib(idat.data(), idat.size(), raw, expect)) return img;
+        if (raw.size() != expect) return img;
+
+        img.rgba.assign(static_cast<std::size_t>(info.w) * info.h * 4, 0);
+        std::size_t off = 0;
+        for (int p = 0; p < nPasses; ++p) {
+            std::uint32_t pw = info.w > passes[p].x0 ? (info.w - passes[p].x0 + passes[p].dx - 1) / passes[p].dx : 0;
+            std::uint32_t ph = info.h > passes[p].y0 ? (info.h - passes[p].y0 + passes[p].dy - 1) / passes[p].dy : 0;
+            if (!pw || !ph) continue;
+            std::size_t rowBytes = (static_cast<std::size_t>(pw) * ch * info.depth + 7) / 8;
+            std::uint8_t* prior = nullptr;
+            for (std::uint32_t y = 0; y < ph; ++y) {
+                std::uint8_t filter = raw[off++];
+                std::uint8_t* row = raw.data() + off;
+                off += rowBytes;
+                if (!UnfilterRow(filter, row, prior, rowBytes, bpp)) return img;
+                ExpandRow(info, row, pw, img.rgba.data(), info.w,
+                          passes[p].y0 + y * passes[p].dy, passes[p].x0, passes[p].dx);
+                prior = row;
+            }
+        }
+        img.width = info.w; img.height = info.h; img.valid = true;
+        return img;
+    }
+
     Image Decode(const std::uint8_t* d, std::size_t len)
     {
         switch (DetectFormat(d, len)) {
         case Format::BMP: return DecodeBMP(d, len);
-        case Format::PNG: return {};   // needs a DEFLATE stage (deferred)
+        case Format::PNG: return DecodePNG(d, len);
         case Format::DDS: return {};   // already engine-native
         default:          return DecodeTGA(d, len);   // headerless fallback
         }
@@ -180,19 +419,51 @@ namespace SB::TexCodec
         return info;
     }
 
-    std::vector<std::uint8_t> EncodeDDS_RGBA(const Image& img)
+    // Clamp-edge 2x2 box filter, one mip level down (round to nearest).
+    static Image HalveBox(const Image& src)
+    {
+        Image m;
+        m.width = src.width > 1 ? src.width / 2 : 1;
+        m.height = src.height > 1 ? src.height / 2 : 1;
+        m.rgba.resize(static_cast<std::size_t>(m.width) * m.height * 4);
+        for (std::uint32_t y = 0; y < m.height; ++y) {
+            std::uint32_t y0 = 2 * y, y1 = y0 + 1 < src.height ? y0 + 1 : src.height - 1;
+            for (std::uint32_t x = 0; x < m.width; ++x) {
+                std::uint32_t x0 = 2 * x, x1 = x0 + 1 < src.width ? x0 + 1 : src.width - 1;
+                for (int c = 0; c < 4; ++c) {
+                    unsigned s = src.rgba[(static_cast<std::size_t>(y0) * src.width + x0) * 4 + c] +
+                                 src.rgba[(static_cast<std::size_t>(y0) * src.width + x1) * 4 + c] +
+                                 src.rgba[(static_cast<std::size_t>(y1) * src.width + x0) * 4 + c] +
+                                 src.rgba[(static_cast<std::size_t>(y1) * src.width + x1) * 4 + c];
+                    m.rgba[(static_cast<std::size_t>(y) * m.width + x) * 4 + c] = static_cast<std::uint8_t>((s + 2) >> 2);
+                }
+            }
+        }
+        m.valid = true;
+        return m;
+    }
+
+    std::vector<std::uint8_t> EncodeDDS_RGBA(const Image& img, bool mipmaps)
     {
         std::vector<std::uint8_t> out;
         if (!img.valid || img.rgba.size() != static_cast<std::size_t>(img.width) * img.height * 4) return out;
-        out.reserve(128 + img.rgba.size());
+
+        std::uint32_t levels = 1;
+        if (mipmaps)
+            for (std::uint32_t w = img.width, h = img.height; w > 1 || h > 1;
+                 w = w > 1 ? w / 2 : 1, h = h > 1 ? h / 2 : 1) ++levels;
+
+        out.reserve(128 + img.rgba.size() * (mipmaps ? 4 : 3) / 3);
         out.push_back('D'); out.push_back('D'); out.push_back('S'); out.push_back(' ');
         wr32(out, 124);                                  // dwSize
-        wr32(out, 0x1 | 0x2 | 0x4 | 0x1000 | 0x8);       // CAPS|HEIGHT|WIDTH|PIXELFORMAT|PITCH
+        std::uint32_t flags = 0x1 | 0x2 | 0x4 | 0x1000 | 0x8;   // CAPS|HEIGHT|WIDTH|PIXELFORMAT|PITCH
+        if (mipmaps) flags |= 0x20000;                   // DDSD_MIPMAPCOUNT
+        wr32(out, flags);
         wr32(out, img.height);
         wr32(out, img.width);
         wr32(out, img.width * 4);                        // pitch
         wr32(out, 0);                                    // depth
-        wr32(out, 0);                                    // mipMapCount (single)
+        wr32(out, mipmaps ? levels : 0);                 // mipMapCount
         for (int i = 0; i < 11; ++i) wr32(out, 0);       // reserved1
         wr32(out, 32);                                   // pixelformat size
         wr32(out, 0x1 | 0x40);                           // DDPF_ALPHAPIXELS|DDPF_RGB
@@ -202,16 +473,26 @@ namespace SB::TexCodec
         wr32(out, 0x0000FF00);                           // G mask
         wr32(out, 0x00FF0000);                           // B mask
         wr32(out, 0xFF000000);                           // A mask
-        wr32(out, 0x1000);                               // caps = DDSCAPS_TEXTURE
+        std::uint32_t caps = 0x1000;                     // DDSCAPS_TEXTURE
+        if (mipmaps) caps |= 0x8 | 0x400000;             // COMPLEX | MIPMAP
+        wr32(out, caps);
         wr32(out, 0); wr32(out, 0); wr32(out, 0);        // caps2..4
         wr32(out, 0);                                    // reserved2
+
         out.insert(out.end(), img.rgba.begin(), img.rgba.end());
+        if (mipmaps) {
+            Image level = img;
+            for (std::uint32_t i = 1; i < levels; ++i) {
+                level = HalveBox(level);
+                out.insert(out.end(), level.rgba.begin(), level.rgba.end());
+            }
+        }
         return out;
     }
 
-    bool WriteDDS(const std::filesystem::path& out, const Image& img)
+    bool WriteDDS(const std::filesystem::path& out, const Image& img, bool mipmaps)
     {
-        auto bytes = EncodeDDS_RGBA(img);
+        auto bytes = EncodeDDS_RGBA(img, mipmaps);
         if (bytes.empty()) return false;
         std::ofstream f(out, std::ios::binary | std::ios::trunc);
         if (!f) return false;
@@ -223,6 +504,6 @@ namespace SB::TexCodec
     {
         Image img = DecodeFile(in);
         if (!img.valid) return false;
-        return WriteDDS(out, img);
+        return WriteDDS(out, img, true);
     }
 }

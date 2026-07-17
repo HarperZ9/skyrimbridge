@@ -86,7 +86,7 @@ almost never necessary because CommonLib covers it.
 
 ## 3. What is built, compiled, and installed (the current state)
 
-Repo: `C:\dev\skyrimbridge\` (49 core sources, 23 Papyrus natives). Build with
+Repo: `C:\dev\skyrimbridge\` (50+ core sources, 25 Papyrus natives). Build with
 VS18 + CommonLibSSE-NG 3.7.0 (static x64 triplet). Installed DLL target:
 `E:\Modlists\SkyGroundChronicles\mods\SkyrimBridge\SKSE\Plugins\SkyrimBridge.dll`.
 
@@ -129,21 +129,37 @@ losslessness witness). Built on CommonLib RE:: layouts + the OFFSET-SPEC.
 Nothing re-derived from the DRM'd exe.
 - `Value` (Float / Int / Bool / Color3 / Color4 / FormLink / String), `Field`
   (name + kind + std::function get/set), `Schema` (per FormType), registry.
-- **Six schemas registered:** ImageSpace, Volumetric, LightingTemplate,
-  **Weather (full 487-field record)**, Climate, Region. Adding a record type is
-  one schema block; the macros (RF_F/RF_U32/RF_U8/RF_C3F/RF_C3B) and the
-  Weather-style programmatic builder handle scalars and indexed arrays.
+- **Eleven schemas registered:** ImageSpace, Volumetric, LightingTemplate,
+  **Weather (full 487-field record)**, Climate, Region, Light, Water (full
+  DNAM shader block), EffectShader, ImageSpaceModifier, WorldSpace. Adding a
+  record type is one schema block; the macros (RF_F/RF_INT/RF_B/RF_FLAGS/RF_S/
+  RF_LINK/RF_C3F/RF_C3B) and the Weather-style programmatic builder handle
+  scalars, links, strings, and indexed arrays. Honest exclusions are named in
+  comments at each schema (e.g. EffectShader blend modes: the D3DBLEND enums
+  are only forward-declared in CommonLib; ImageSpaceModifier's uint32 DNAM
+  fields are exposed as raw Ints, not lossy-decoded).
 - Papyrus surface: `EngineReflectDump 0x<id>` (writes
   `SkyrimBridge/dumps/<id>.ini`), edit it, `EngineReflectApply 0x<id>`,
-  `EngineReflectVerify 0x<id>` (witnesses the lossless round-trip).
+  `EngineReflectVerify 0x<id>` (witnesses the lossless round-trip),
+  `EngineReflectVerifyStrict 0x<id>` (opt-in write-back idempotence witness;
+  mutates), `EngineReflectList 0|0x<id>` (schema/field discovery, in-game).
 
-### 3c. TextureCodec (foreign-asset integration, started)
-`src/core/TextureCodec.{h,cpp}`. Pure, zero-dep. TGA (uncompressed + RLE) and
-BMP (24/32-bit) decode -> RGBA32 -> uncompressed R8G8B8A8 DDS the engine
-accepts; DDS header read. Papyrus native `ConvertTexture(in,out)`. VALIDATED
-offline: BMP pixel-exact vs PIL on real ENB files, TGA uncompressed vs PIL + the
-RLE branch exact. HONEST NULLS: PNG decode (needs DEFLATE), BCn write
-compression, and the runtime texture-load hook are NOT done.
+### 3c. TextureCodec (foreign-asset integration)
+`src/core/TextureCodec.{h,cpp}` + `src/core/Inflate.{h,cpp}`. Pure, zero-dep.
+- Decode: **PNG** (from-scratch DEFLATE/zlib inflate with verified Adler-32 +
+  per-chunk CRC-32; all five color types; 1/2/4/8/16-bit, 16-bit narrows via
+  high byte; all five filters; Adam7 interlace; tRNS palette alpha + colorkey),
+  TGA (uncompressed + RLE), BMP (24/32-bit).
+- Encode: uncompressed R8G8B8A8 DDS with an optional clamp-edge box-filter
+  mipmap chain down to 1x1 (`ConvertToDDS` emits mipmapped by default; the
+  single-mip byte layout is unchanged when mips are off).
+- Papyrus native `ConvertTexture(in,out)`.
+- VALIDATED offline (77-check harness): inflate byte-exact vs zlib on the real
+  IDAT streams (incl. a 33.7 MB stream), PNG pixel-exact vs PIL on 40 real ENB
+  PNGs + synthetic modes + hand-built Adam7/16-bit cases, BMP/TGA vs PIL, DDS
+  mip structure + filter math.
+HONEST NULLS: BCn block compression on write and the runtime texture-load
+substitution hook are NOT done.
 
 ### 3d. Config architecture (ours, not theirs)
 `src/core/SBConfig.h` = one flat-INI dialect (`[Section]`, `Key = Value`, `;`
@@ -198,23 +214,24 @@ Do these roughly in order. Each is a real, bounded increment. Difficulty and
 confidence are labeled honestly.
 
 **Lane A: finish EngineReflect coverage + power.**
-1. More schemas as needed: TESObjectLIGH, TESWorldSpace, TESWaterForm,
-   BGSMaterialObject, EffectShader, ImageSpaceModifier. Same one-block pattern.
-   (easy, high confidence)
-2. `EngineReflectList` native: enumerate registered schemas + a form's fields,
-   so it is discoverable in-game. (easy)
-3. Optional stricter Verify mode: write-back idempotence (Read, Write, Read,
-   compare) behind an explicit opt-in, since it mutates. (easy)
+1. ~~More schemas~~ DONE 2026-07-16: Light, Water, EffectShader,
+   ImageSpaceModifier, WorldSpace registered (compile-verified against
+   CommonLib member layouts; in-game dump/apply/verify is operator-validated).
+   Further types (BGSMaterialObject, TESObjectLAND, ...) remain one-block adds.
+2. ~~`EngineReflectList` native~~ DONE 2026-07-16 (0 = all schemas, 0x<id> =
+   that form's fields; writes `dumps/schema-<name>.txt` + log).
+3. ~~Stricter Verify mode~~ DONE 2026-07-16: `EngineReflectVerifyStrict`,
+   separate opt-in native since it mutates.
 4. Structured/variant records: a purpose-built walker for TESRegionData
    subrecords (weather lists, map, objects), which a flat schema cannot express.
    (moderate)
 
 **Lane B: complete the texture pipeline (the operator's explicit asset goal).**
-5. **PNG decode.** Write a from-scratch DEFLATE/inflate + PNG (filters,
-   8-bit RGB/RGBA/palette). This unlocks the most common modder format. Validate
-   vs PIL on the real ENB PNGs (`enblensmask.png`, `enbraindrops.png`,
-   `frost.png`). (moderate, the inflate is the hard part but well-specified)
-6. **Mipmap generation** on DDS write (box filter down to 1x1). (easy)
+5. ~~**PNG decode**~~ DONE 2026-07-16: from-scratch inflate (`Inflate.{h,cpp}`)
+   + full PNG decoder, validated pixel-exact vs PIL on 40 real ENB PNGs and
+   byte-exact vs zlib on their IDAT streams (77-check harness).
+6. ~~**Mipmap generation**~~ DONE 2026-07-16: clamp-edge box filter to 1x1,
+   default-on in `ConvertToDDS`, single-mip layout preserved otherwise.
 7. **BCn block compression** on write (BC1/BC3/BC7). Start BC1/BC3 (tractable);
    BC7 is genuinely hard to do well. Optional: emit DX10-header DDS. (BC1/3
    moderate, BC7 hard)
