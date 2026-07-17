@@ -15,9 +15,12 @@
 //  game-bound step. So this builder is a library foundation, not yet a live
 //  spawn path.
 //
-//  Single-chunk limit: a chunk spans at most 65535 * 0.001 = 65.535 game
-//  units per axis (~0.9 m). Larger meshes need multi-chunk splitting (a
-//  documented extension); Build() returns empty rather than overflow.
+//  Chunking: a chunk's vertex span is limited to 65535 * 0.001 = 65.535
+//  game units per axis by the u16 quantization. Larger meshes are split
+//  automatically: triangles group by centroid on a grid, any triangle a
+//  chunk cannot absorb without breaking its span (and any triangle larger
+//  than the limit itself) escapes to bigVerts/bigTris as exact floats,
+//  which is what the wild blocks use them for.
 //
 //  Author: Zain Dana Harper
 //  License: MIT
@@ -30,12 +33,14 @@
 
 namespace SB::CompressedMesh
 {
-    // Serialize a mesh to bhkCompressedMeshShapeData bytes. Empty on failure
-    // (degenerate mesh, or per-axis span > 65.535 units: needs chunking).
+    // Serialize a mesh to bhkCompressedMeshShapeData bytes (multi-chunk when
+    // needed). Empty on failure (degenerate mesh, or more escaped big-tri
+    // vertices than u16 indexing allows).
     // material is a SkyrimHavokMaterial hash (see CollisionMaterial.h).
     std::vector<std::uint8_t> Build(const ModelCodec::Mesh& mesh, std::uint32_t material);
 
     // The quantization step (game units per u16 unit), invariant in the corpus.
     constexpr float kQuantStep = 0.001f;
     constexpr float kMaxChunkSpan = 65535.0f * kQuantStep;
+    constexpr float kChunkGrid = 48.0f;    // centroid grid cell (< span/1.36)
 }

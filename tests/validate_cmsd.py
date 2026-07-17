@@ -91,18 +91,58 @@ check(f"real CMSD blocks re-serialize byte-exact ({byteexact}/{checked})",
 
 
 # ── 2. builder: port of CompressedMesh::Build ──────────────────────────────
+CHUNK_GRID = 48.0
+
+
 def build_cmsd(positions, indices, material):
-    """Port of CompressedMesh::Build -> bytes ('' if it would refuse)."""
+    """Port of CompressedMesh::Build (multi-chunk) -> bytes ('' on refusal)."""
     if len(positions) < 3 or len(indices) < 3 or len(indices) % 3 or len(positions) > 0xFFFF:
         return b""
     lo = [min(p[k] for p in positions) for k in range(3)]
     hi = [max(p[k] for p in positions) for k in range(3)]
-    if any(hi[k] - lo[k] > MAX_SPAN for k in range(3)):
+    ntri = len(indices) // 3
+
+    def tri_bounds(t):
+        vs = [positions[indices[t*3+k]] for k in range(3)]
+        tl = [min(v[k] for v in vs) for k in range(3)]
+        th = [max(v[k] for v in vs) for k in range(3)]
+        return tl, th
+
+    import math
+    grid = {}          # key -> {"lo","hi","tris"}
+    big_tris = []
+    for t in range(ntri):
+        tl, th = tri_bounds(t)
+        if any(th[k] - tl[k] > MAX_SPAN for k in range(3)):
+            big_tris.append(t)
+            continue
+        c = [sum(positions[indices[t*3+k]][ax] for k in range(3)) / 3.0 for ax in range(3)]
+        key = tuple(int(math.floor((c[ax] - lo[ax]) / CHUNK_GRID)) for ax in range(3))
+        ch = grid.get(key)
+        if ch is None:
+            grid[key] = {"lo": tl[:], "hi": th[:], "tris": [t]}
+            continue
+        nlo = [min(ch["lo"][k], tl[k]) for k in range(3)]
+        nhi = [max(ch["hi"][k], th[k]) for k in range(3)]
+        if any(nhi[k] - nlo[k] > MAX_SPAN for k in range(3)):
+            big_tris.append(t)
+            continue
+        ch["lo"], ch["hi"] = nlo, nhi
+        ch["tris"].append(t)
+
+    big_vert_of = {}
+    big_verts = []
+    for t in big_tris:
+        for k in range(3):
+            g = indices[t*3+k]
+            if g not in big_vert_of:
+                big_vert_of[g] = len(big_verts)
+                big_verts.append(g)
+    if len(big_verts) > 0xFFFF:
         return b""
 
     def q(world, base):
-        v = round((world - base) / QUANT)
-        return max(0, min(0xFFFF, v))
+        return max(0, min(0xFFFF, round((world - base) / QUANT)))
 
     b = bytearray()
     P = lambda fmt, *v: b.extend(struct.pack(fmt, *v))
@@ -115,27 +155,37 @@ def build_cmsd(positions, indices, material):
     P("<I", 1); P("<II", material, 0)
     P("<I", 0)
     P("<I", 1); P("<4f", 0, 0, 0, 1); P("<4f", 0, 0, 0, 1)
-    P("<I", 0); P("<I", 0)
-    P("<I", 1)
-    P("<4f", lo[0], lo[1], lo[2], 0.0)
-    P("<I", 0); P("<HH", 0xFFFF, 0)
-    P("<I", len(positions) * 3)
-    for p in positions:
-        P("<HHH", q(p[0], lo[0]), q(p[1], lo[1]), q(p[2], lo[2]))
-    P("<I", len(indices))
-    for ix in indices:
-        P("<H", ix)
-    P("<I", 0); P("<I", 0)
+    P("<I", len(big_verts))
+    for g in big_verts:
+        P("<4f", positions[g][0], positions[g][1], positions[g][2], 0.0)
+    P("<I", len(big_tris))
+    for t in big_tris:
+        for k in range(3):
+            P("<H", big_vert_of[indices[t*3+k]])
+        P("<I", 0); P("<H", 0)
+    P("<I", len(grid))
+    for key in grid:            # dict preserves insertion order == C++ map? see note
+        ch = grid[key]
+        P("<4f", ch["lo"][0], ch["lo"][1], ch["lo"][2], 0.0)
+        P("<I", 0); P("<HH", 0xFFFF, 0)
+        local_of, verts, tri16 = {}, [], []
+        for t in ch["tris"]:
+            for k in range(3):
+                g = indices[t*3+k]
+                if g not in local_of:
+                    local_of[g] = len(verts)
+                    verts.append(g)
+                tri16.append(local_of[g])
+        P("<I", len(verts) * 3)
+        for g in verts:
+            P("<HHH", q(positions[g][0], ch["lo"][0]), q(positions[g][1], ch["lo"][1]),
+              q(positions[g][2], ch["lo"][2]))
+        P("<I", len(tri16))
+        for v16 in tri16:
+            P("<H", v16)
+        P("<I", 0); P("<I", 0)
     P("<I", 0)
     return bytes(b)
-
-
-def decode_verts(out):
-    c = out["chunks"][0]
-    t = c["translation"]
-    vs = c["vertices"]
-    return [(t[0] + vs[i] * QUANT, t[1] + vs[i+1] * QUANT, t[2] + vs[i+2] * QUANT)
-            for i in range(0, len(vs), 3)]
 
 
 print("[builder: round-trip + decode accuracy]")
@@ -151,29 +201,64 @@ def cube_mesh(origin=(0, 0, 0), s=10.0):
     return verts, idx
 
 
-def check_builder(label, verts, idx, mat):
+def decode_all_tris(out, positions):
+    """Reconstruct every triangle (chunks + bigTris) as vertex-position
+    triples rounded to the quant grid, for coverage comparison."""
+    tris = []
+    for c in out["chunks"]:
+        t = c["translation"]
+        vs = c["vertices"]
+        wverts = [(t[0] + vs[k]*QUANT, t[1] + vs[k+1]*QUANT, t[2] + vs[k+2]*QUANT)
+                  for k in range(0, len(vs), 3)]
+        idx = c["indices"]
+        for j in range(0, len(idx) - 2, 3):
+            tris.append(tuple(sorted(tuple(round(x, 3) for x in wverts[idx[j+m]]) for m in range(3))))
+    for (a, b3, c3, mat, weld) in out["bigTris"]:
+        bv = out["bigVerts"]
+        tri = tuple(sorted(tuple(round(bv[e][ax], 3) for ax in range(3)) for e in (a, b3, c3)))
+        tris.append(tri)
+    return tris
+
+
+def input_tris(positions, indices):
+    out = []
+    for j in range(0, len(indices), 3):
+        out.append(tuple(sorted(tuple(round(positions[indices[j+m]][ax], 3) for ax in range(3))
+                                for m in range(3))))
+    return out
+
+
+def check_multichunk(label, verts, idx, mat, expect_chunks_ge=1, expect_bigtris=False):
     data = build_cmsd(verts, idx, mat)
     if not data:
         check(f"{label}: built", False, "refused")
         return
     out = parse_cmsd(data, 0, len(data))
-    if out["_consumed"] != len(data):
-        check(f"{label}: parses exactly", False, f"{out['_consumed']} != {len(data)}")
-        return
-    if reserialize(out) != data:
-        check(f"{label}: re-serializes byte-exact", False)
-        return
-    dec = decode_verts(out)
-    maxerr = max(max(abs(dec[i][k] - verts[i][k]) for k in range(3)) for i in range(len(verts)))
-    matok = out["materials"][0][0] == mat
-    idxok = out["chunks"][0]["indices"] == list(idx)
-    check(f"{label}: round-trips, verts within {QUANT} ({maxerr:.5f}), material+indices exact",
-          maxerr <= QUANT + 1e-6 and matok and idxok,
-          f"err={maxerr} matok={matok} idxok={idxok}")
+    ok_consume = out["_consumed"] == len(data) and reserialize(out) == data
+    nchunks = len(out["chunks"])
+    # per-chunk span within the u16 limit
+    span_ok = True
+    for c in out["chunks"]:
+        vs = c["vertices"]
+        if vs:
+            for ax in range(3):
+                comp = vs[ax::3]
+                if (max(comp) - min(comp)) * QUANT > MAX_SPAN + 1e-4:
+                    span_ok = False
+    got = sorted(decode_all_tris(out, verts))
+    want = sorted(input_tris(verts, idx))
+    coverage = got == want
+    has_big = len(out["bigTris"]) > 0
+    check(f"{label}: {nchunks} chunks, byte-round-trip, per-chunk span ok, "
+          f"every input triangle covered{' (+bigTris)' if has_big else ''}",
+          ok_consume and span_ok and coverage and nchunks >= expect_chunks_ge
+          and (has_big == expect_bigtris),
+          f"consume={ok_consume} span={span_ok} coverage={coverage} "
+          f"chunks={nchunks} big={len(out['bigTris'])}")
 
 
 v, i = cube_mesh()
-check_builder("cube", v, i, 0x17C77AAF)  # snow
+check_multichunk("cube (single chunk)", v, i, 0x17C77AAF)  # snow
 
 # concave L: two boxes sharing an edge
 lv, li = [], []
@@ -183,12 +268,34 @@ for org in ((0, 0, 0), (10, 0, 0)):
     lv += cv
     li += [x + base for x in ci]
     base += len(cv)
-check_builder("concave-L (two boxes)", lv, li, 0xDF02F237)  # stone
+check_multichunk("concave-L (two boxes)", lv, li, 0xDF02F237)  # stone
 
-# span-limit refusal
+print("[multi-chunk: large meshes]")
+# a 200x200 unit terrain grid of small triangles -> many chunks, no bigTris
+import math as _m
+gverts, gidx = [], []
+N = 20
+STEP = 10.0   # 200 units span, far over the 65.5 chunk limit
+for gy in range(N + 1):
+    for gx in range(N + 1):
+        gverts.append((gx * STEP, gy * STEP, (gx + gy) % 3 * 1.0))
+for gy in range(N):
+    for gx in range(N):
+        a = gy * (N + 1) + gx
+        gidx += [a, a + 1, a + N + 1,  a + 1, a + N + 2, a + N + 1]
+check_multichunk("200-unit terrain grid", gverts, gidx, 0x340E5D1C, expect_chunks_ge=9)
+
+# a mesh with one giant triangle spanning > limit -> forced into bigTris
+bigverts = list(gverts) + [(0, 0, 0), (300, 0, 0), (0, 300, 5)]
+n0 = len(gverts)
+bigidx = list(gidx) + [n0, n0 + 1, n0 + 2]
+check_multichunk("terrain + one giant triangle (bigTris escape)", bigverts, bigidx,
+                 0x340E5D1C, expect_chunks_ge=9, expect_bigtris=True)
+
+# span-limit no longer a hard refusal: a mesh just over the limit now chunks
 big = [(0, 0, 0), (100, 0, 0), (0, 100, 0), (0, 0, 100)]
-check("span > 65.535 units refused (needs chunking)",
-      build_cmsd(big, [0, 1, 2, 0, 2, 3], 0x1DD9C611) == b"")
+check("mesh over single-chunk span now builds (multi-chunk / bigTris), not refused",
+      build_cmsd(big, [0, 1, 2, 0, 2, 3], 0x1DD9C611) != b"")
 
 # a real decoded mesh -> rebuild
 real = None
@@ -220,7 +327,7 @@ for p in sample:
     if real:
         break
 if real:
-    check_builder("rebuilt from a real decoded mesh", real[0], real[1], 0x340E5D1C)
+    check_multichunk("rebuilt from a real decoded mesh", real[0], real[1], 0x340E5D1C)
 else:
     check("real list-triangle chunk found to rebuild", False, "none in sample")
 
@@ -230,8 +337,8 @@ src = open(CPP, encoding="utf-8").read()
 check("shipped builder carries the invariant head + step",
       all(s in src for s in ("b.u32(17)", "b.u32(18)", "0x3FFFF", "0x1FFFF",
                              "kQuantStep", "b.u8(1)")))
-check("shipped builder writes the chosen material and refuses on span",
-      "b.u32(material)" in src and "kMaxChunkSpan" in src)
+check("shipped builder writes the chosen material and chunks on span",
+      "b.u32(material)" in src and "kMaxChunkSpan" in src and "kChunkGrid" in src)
 
 print(f"\n{_passed} passed, {_failed} failed")
 sys.exit(1 if _failed else 0)

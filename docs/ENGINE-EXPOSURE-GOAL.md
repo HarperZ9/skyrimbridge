@@ -532,6 +532,17 @@ category table: `docs/PAIN-POINTS-ASSESSMENT-2026-07.md`. Build order:
     finalize + walk-test (protocol section 13). We now emit the hard geometry
     the community's tools could never generate openly; NifSkope adds MOPP
     one-click.
+28. ~~Multi-chunk CMSD for larger meshes~~ DONE 2026-07-17: the
+    bhkCompressedMeshShapeData builder no longer caps at 65.535 units. A mesh
+    is split into chunks by triangle centroid on a 48-unit grid, each chunk
+    quantizing its own u16 vertices; triangles that would break a chunk's
+    span (or exceed it outright) escape to bigVerts/bigTris as exact floats,
+    the wild blocks' own mechanism. Verified: bigTris/chunk material fields
+    are table indices (0/1/2), not hashes. Terrain-scale statics now get
+    exact collision. Offline-proven: `tests/validate_cmsd.py`, 10/10 (a
+    200-unit grid -> 25 chunks, giant-triangle -> bigTris escape, EVERY input
+    triangle covered, per-chunk span within u16, real-mesh rebuild). The
+    mesh-collision chain + all model receipts unchanged.
 
 **Lane E: close the honest nulls already on record.**
 12. ~~Reverse `AELAS.dll`'s hooks / sun repositioning~~ DONE 2026-07-16 in two

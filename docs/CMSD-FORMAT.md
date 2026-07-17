@@ -60,14 +60,19 @@ numConvexPieces     u32     (bhkCMSBigTris "convex piece A" tail; 0 common)
 
 ## What generation needs (the builder)
 
-Emit one chunk (the common shape): quantize our mesh verts to u16 around a
-chunk translation with step 0.001, emit list triangles (strips optional and
-skipped: `strips[]` empty, all triangles in `indices[]`), one
-`chunkMaterials` entry with the chosen material, identity transform list,
-invariant head. `bigVerts`/`bigTris` stay empty (they hold the
-un-quantizable large-coordinate triangles; a single prop chunk near its own
-origin does not need them). The remaining game-bound step is the MOPP tree
-over this data via the free niftools tool.
+`CompressedMesh::Build` emits multi-chunk when needed. Triangles group by
+centroid on a 48-unit grid; each chunk quantizes its own vertices to u16
+around its own translation (step 0.001), emits list triangles (`strips[]`
+empty, all in `indices[]` with a per-chunk deduplicated vertex table), one
+`chunkMaterials` entry with the chosen material at index 0, identity
+transform list, invariant head. A triangle a chunk cannot absorb without
+exceeding the 65.535-unit span, or one larger than the span itself, escapes
+to `bigVerts`/`bigTris` as exact float4 vertices, which is what the wild
+blocks use them for. Verified against the corpus: `bigTris.material` and the
+chunk `materialIndex` are TABLE INDICES (0/1/2 in the wild), not hashes.
+Coverage is exact: every input triangle lands in a chunk or bigTris, and
+each chunk's decoded verts stay within the u16 span. The remaining
+game-bound step is the MOPP tree over this data via the free niftools tool.
 
 Honest bound: the builder is offline-provable to byte-round-trip and to
 decode back to the input mesh within the 0.001 quantization; the assembled
