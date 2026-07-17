@@ -11,13 +11,16 @@
 //  Supported now: TGA (uncompressed + RLE, 24/32-bit) read/write, BMP
 //  (24/32-bit) read, PNG read (all five color types, 1/2/4/8/16-bit, Adam7
 //  interlace, tRNS; 16-bit narrows to 8 via high byte), DDS read (uncompressed
-//  32-bit masked, BC1/DXT1, BC3/DXT5; top mip) and DDS write (uncompressed
-//  RGBA8 or BC1/BC3 block compression, optional box-filter mipmaps).
+//  32-bit masked, BC1/DXT1, BC3/DXT5, and DX10-header BC1/BC3/BC7/RGBA8/BGRA8;
+//  top mip) and DDS write (uncompressed RGBA8, BC1/BC3, or DX10-header BC7,
+//  optional box-filter mipmaps).
 //  BC encode quality tier is BASELINE and documented: endpoints are the
-//  block's two most distant colors, nearest palette index per pixel. Good
-//  for utility conversion; not a cluster-fit art-pipeline encoder.
-//  Honest nulls (not faked): BC7, DX10-header DDS, cubemaps/volumes, DDS
-//  mip-chain read beyond the top level; the runtime texture-load hook.
+//  block's two most distant colors, nearest palette index per pixel (BC7
+//  encodes mode 6 only; see TextureBC7.h). Good for utility conversion; not
+//  a cluster-fit art-pipeline encoder.
+//  Honest nulls (not faked): BC4/BC5/BC6H, cubemaps/volumes/arrays, DDS
+//  mip-chain read beyond the top level, sRGB is passed through untouched
+//  (the payload bytes are identical; only the header flag differs).
 //
 //  Author: Zain Dana Harper
 //  License: MIT
@@ -53,7 +56,7 @@ namespace SB::TexCodec
         bool          valid = false;
     };
 
-    enum class DDSFormat { RGBA8, BC1, BC3 };
+    enum class DDSFormat { RGBA8, BC1, BC3, BC7 };
 
     Format DetectFormat(const std::uint8_t* data, std::size_t len);   // by magic bytes
     Format DetectFromPath(std::string_view path);                     // by extension
@@ -62,7 +65,7 @@ namespace SB::TexCodec
     Image DecodeTGA(const std::uint8_t* data, std::size_t len);
     Image DecodeBMP(const std::uint8_t* data, std::size_t len);
     Image DecodePNG(const std::uint8_t* data, std::size_t len);
-    Image DecodeDDSImage(const std::uint8_t* data, std::size_t len);  // RGBA8/BGRA8 masks, DXT1, DXT5; top mip
+    Image DecodeDDSImage(const std::uint8_t* data, std::size_t len);  // masks, DXT1/DXT5, DX10 BC1/BC3/BC7/RGBA8/BGRA8; top mip
     Image Decode(const std::uint8_t* data, std::size_t len);          // dispatch by magic
     Image DecodeFile(const std::filesystem::path& path);
 

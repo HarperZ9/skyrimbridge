@@ -69,7 +69,7 @@ namespace SB
     //   reflect.verify arg0 = "0x<formid>", argInt = 1 -> strict  -> resultInt = fields (0 = fail)
     //   region.dump    arg0 = "0x<region>"         -> resultText
     //   region.weather arg0 = "0x<region>", arg1 = "0x<weather>", argInt = chance -> resultInt
-    //   texture.convert arg0 = in, arg1 = out, argInt = 0|1|2 (RGBA8|BC1|BC3)     -> resultInt = ok
+    //   texture.convert arg0 = in, arg1 = out, argInt = 0|1|2|3 (RGBA8|BC1|BC3|BC7) -> resultInt = ok
     //   texture.scan   argInt = 1 (dry) | 0 (live) -> resultInt = converted
     //   model.convert  arg0 = in, arg1 = out       -> resultInt = ok
 

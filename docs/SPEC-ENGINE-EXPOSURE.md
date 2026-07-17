@@ -104,9 +104,11 @@ cgf "SkyrimBridge.RegionApply" 0x<region>                    ; chance edits from
 | TGA | yes | yes | read: uncompressed + RLE, 24/32-bit; write: 32-bit uncompressed top-origin |
 | BMP | yes | no | 24/32-bit, top-down and bottom-up |
 | DDS RGBA8 | yes | yes | uncompressed 32-bit byte-aligned masks (RGBA/BGRA) |
-| DDS BC1/DXT1 | yes | yes | decode: both 3- and 4-color modes; encode: opaque |
-| DDS BC3/DXT5 | yes | yes | decode honors the always-4-color rule; encode carries alpha |
-| DDS BC7 / DX10 / cubemaps / volumes | no | no | honest nulls |
+| DDS BC1/DXT1 | yes | yes | decode: both 3- and 4-color modes; encode: opaque. Legacy or DX10 header |
+| DDS BC3/DXT5 | yes | yes | decode honors the always-4-color rule; encode carries alpha. Legacy or DX10 header |
+| DDS BC7 (DX10) | yes | yes | decode: all 8 modes per the D3D11 spec (tables machine-extracted from DirectXTex); encode: mode 6 baseline, DX10 header |
+| DDS DX10 RGBA8/BGRA8 | yes | no | byte-order formats (dxgi 28/29, 87/91) |
+| DDS BC4 / BC5 / BC6H / cubemaps / volumes / arrays | no | no | honest nulls; sRGB payloads pass through unconverted |
 
 DDS read decodes the top mip. DDS write appends an optional clamp-edge 2x2
 box-filter mip chain down to 1x1 (default on in the conversion natives).
@@ -124,7 +126,7 @@ and `(a+b)/2` color interpolation, truncating `/7` and `/5` alpha ramps.
 ```
 cgf "SkyrimBridge.ConvertTexture" "in.png" "out.dds"        ; by output extension
 cgf "SkyrimBridge.ConvertTexture" "in.dds" "out.tga"        ; DDS -> editable lane
-cgf "SkyrimBridge.ConvertTextureFmt" "in.png" "out.dds" "BC3"  ; BC1 | BC3 | RGBA8
+cgf "SkyrimBridge.ConvertTextureFmt" "in.png" "out.dds" "BC3"  ; BC1 | BC3 | BC7 | RGBA8
 cgf "SkyrimBridge.TextureScanNow" true                      ; dry-run the tree scan
 ```
 
@@ -154,6 +156,14 @@ cgf "SkyrimBridge.TextureScanNow" true                      ; dry-run the tree s
   hand-built blocks (every mode) and real modlist DXT1/DXT5 textures; encode
   output decodes identically under PIL and our model; PSNR floor; lossless
   round-trip on exactly-representable blocks; TGA layout via PIL read-back.
+- `tests/validate_bc7_codec.py` — 92 checks. The partition/anchor tables are
+  parsed out of the shipped TextureBC7.cpp at run time, so the compiled data
+  is what gets verified. Per-mode random-block fuzz (all 8 modes) byte-exact
+  vs PIL; 70+ real modlist BC7 textures byte-exact vs PIL; DX10-rewrapped
+  BC1/BC3 and RGBA8 vs PIL (BGRA8 vs by-construction swizzle: PIL lacks
+  dxgi 87); cubemap/array refusal; reserved mode -> transparent black;
+  mode-6 encoder lossless on exactly-representable blocks, anchor-swap
+  exact, PIL-agreed output, 54 dB PSNR measured on the sampled content.
 
 Both harnesses are faithful Python ports of the C++ and run offline against
 the real files in the modlist.
@@ -287,7 +297,7 @@ the mailbox carries the trigger and a bounded 4 KiB text result.
 | `reflect.verify` | `arg0` = `"0x<formid>"`, `argInt` = 1 for strict (MUTATES) | `resultInt` = fields, 0 on failure |
 | `region.dump` | `arg0` = `"0x<region>"` | subrecord dump (also `dumps/<id>.region.ini`) |
 | `region.weather` | `arg0` = region, `arg1` = weather, `argInt` = chance | `resultInt` = entries edited |
-| `texture.convert` | `arg0` = in, `arg1` = out, `argInt` = 0/1/2 (RGBA8/BC1/BC3) | `resultInt` = ok |
+| `texture.convert` | `arg0` = in, `arg1` = out, `argInt` = 0/1/2/3 (RGBA8/BC1/BC3/BC7) | `resultInt` = ok |
 | `texture.scan` | `argInt` = 1 dry / 0 live | `resultInt` = converted, counts in text |
 | `model.convert` | `arg0` = in, `arg1` = out | `resultInt` = ok |
 

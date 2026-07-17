@@ -14,7 +14,7 @@ Usage:
   python sb_command_client.py reflect.verify 0x10A241        (--int 1 = strict, MUTATES)
   python sb_command_client.py region.dump 0x<region>
   python sb_command_client.py region.weather 0x<region> 0x<weather> --int <chance>
-  python sb_command_client.py texture.convert in.png out.dds --int 2   (0/1/2 = RGBA8/BC1/BC3)
+  python sb_command_client.py texture.convert in.png out.dds --int 2   (0/1/2/3 = RGBA8/BC1/BC3/BC7)
   python sb_command_client.py texture.scan --int 1                     (1 dry, 0 live)
   python sb_command_client.py model.convert in.obj out.nif
 

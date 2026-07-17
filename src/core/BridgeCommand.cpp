@@ -153,7 +153,8 @@ namespace SB
             }
             if (verb == "texture.convert") {
                 auto fmt = b->argInt == 1 ? TexCodec::DDSFormat::BC1
-                         : b->argInt == 2 ? TexCodec::DDSFormat::BC3 : TexCodec::DDSFormat::RGBA8;
+                         : b->argInt == 2 ? TexCodec::DDSFormat::BC3
+                         : b->argInt == 3 ? TexCodec::DDSFormat::BC7 : TexCodec::DDSFormat::RGBA8;
                 b->resultInt = TexCodec::Convert(b->arg0, b->arg1, fmt) ? 1 : 0;
                 return b->resultInt ? kCmdOK : kCmdFailed;
             }

@@ -98,6 +98,7 @@ namespace SB
                         std::filesystem::create_directories(cacheAbs.parent_path(), ec);
                         const auto fmt = s_format == 0 ? TexCodec::DDSFormat::RGBA8
                                        : s_format == 1 ? TexCodec::DDSFormat::BC1
+                                       : s_format == 3 ? TexCodec::DDSFormat::BC7
                                                        : TexCodec::DDSFormat::BC3;
                         if (!TexCodec::Convert(src, cacheAbs, fmt, s_mips)) {
                             SKSE::log::warn("TextureLoadHook: transcode failed for {}", src.string());
@@ -200,6 +201,7 @@ namespace SB
                 auto fmt = s->Get("Format", "BC3");
                 if (fmt == "RGBA8")    s_format = 0;
                 else if (fmt == "BC1") s_format = 1;
+                else if (fmt == "BC7") s_format = 3;
                 else                   s_format = 2;
                 s_mips = s->Bool("Mipmaps", s_mips);
             }

@@ -35,6 +35,7 @@ namespace SB
                 auto fmt = s->Get("Format", "BC3");
                 if (fmt == "RGBA8")     m_format = 0;
                 else if (fmt == "BC1")  m_format = 1;
+                else if (fmt == "BC7")  m_format = 3;
                 else                    m_format = 2;
                 m_mipmaps = s->Bool("Mipmaps", m_mipmaps);
                 m_refresh = s->Bool("Refresh", m_refresh);
@@ -69,6 +70,7 @@ namespace SB
 
         const auto fmt = m_format == 0 ? TexCodec::DDSFormat::RGBA8
                        : m_format == 1 ? TexCodec::DDSFormat::BC1
+                       : m_format == 3 ? TexCodec::DDSFormat::BC7
                                        : TexCodec::DDSFormat::BC3;
 
         for (std::filesystem::recursive_directory_iterator

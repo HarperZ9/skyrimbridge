@@ -3,6 +3,7 @@
 //=============================================================================
 
 #include "TextureCodec.h"
+#include "TextureBC7.h"
 #include "Inflate.h"
 
 #include <cstring>
@@ -380,7 +381,8 @@ namespace SB::TexCodec
         void DecodeBlockAlpha(const std::uint8_t* in, std::uint8_t alpha[16]);
     }
 
-    // DDS -> RGBA (top mip): uncompressed 32-bit masked formats and DXT1/DXT5.
+    // DDS -> RGBA (top mip): uncompressed 32-bit masked formats, DXT1/DXT5,
+    // and DX10-header BC1/BC3/BC7 plus byte-order RGBA8/BGRA8.
     Image DecodeDDSImage(const std::uint8_t* d, std::size_t len)
     {
         Image img;
@@ -390,31 +392,65 @@ namespace SB::TexCodec
         if (!W || !H || static_cast<std::uint64_t>(W) * H > (1ull << 26)) return img;
         const std::uint32_t pfFlags = rd32(d + 80), fourCC = rd32(d + 84);
         const std::uint8_t* data = d + 128;
-        const std::size_t   avail = len - 128;
+        std::size_t         avail = len - 128;
 
-        if (pfFlags & 0x4) {                                       // FOURCC path
-            const bool dxt1 = fourCC == 0x31545844;                // "DXT1"
-            const bool dxt5 = fourCC == 0x35545844;                // "DXT5"
-            if (!dxt1 && !dxt5) return img;                        // BC7/DX10/...: honest null
+        enum class Kind { BC1, BC3, BC7, RGBA8, BGRA8, Masked } kind;
+        if ((pfFlags & 0x4) && fourCC == 0x30315844) {             // "DX10" extension
+            if (len < 148) return img;
+            const std::uint32_t dxgi = rd32(d + 128), dim = rd32(d + 132);
+            const std::uint32_t misc = rd32(d + 136), arraySize = rd32(d + 140);
+            if (dim != 3 || arraySize > 1 || (misc & 0x4)) return img;   // 2D, single, no cubemap
+            data = d + 148; avail = len - 148;
+            switch (dxgi) {                    // sRGB variants decode identically
+            case 71: case 72: kind = Kind::BC1; break;             // BC1_UNORM(_SRGB)
+            case 77: case 78: kind = Kind::BC3; break;             // BC3_UNORM(_SRGB)
+            case 98: case 99: kind = Kind::BC7; break;             // BC7_UNORM(_SRGB)
+            case 28: case 29: kind = Kind::RGBA8; break;           // R8G8B8A8_UNORM(_SRGB)
+            case 87: case 91: kind = Kind::BGRA8; break;           // B8G8R8A8_UNORM(_SRGB)
+            default: return img;               // BC4/BC5/BC6H/...: honest null
+            }
+        } else if (pfFlags & 0x4) {                                // legacy FOURCC
+            if (fourCC == 0x31545844)      kind = Kind::BC1;       // "DXT1"
+            else if (fourCC == 0x35545844) kind = Kind::BC3;       // "DXT5"
+            else return img;                                       // DXT2/3/4/ATI...: honest null
+        } else if (pfFlags & 0x40) {
+            kind = Kind::Masked;
+        } else {
+            return img;
+        }
+
+        if (kind == Kind::BC1 || kind == Kind::BC3 || kind == Kind::BC7) {
             const std::uint32_t bw = (W + 3) / 4, bh = (H + 3) / 4;
-            const std::size_t blockBytes = dxt5 ? 16 : 8;
+            const std::size_t blockBytes = kind == Kind::BC1 ? 8 : 16;
             if (static_cast<std::size_t>(bw) * bh * blockBytes > avail) return img;
             img.rgba.resize(static_cast<std::size_t>(W) * H * 4);
             std::uint8_t px[16][4]; std::uint8_t alpha[16];
             for (std::uint32_t by = 0; by < bh; ++by)
                 for (std::uint32_t bx = 0; bx < bw; ++bx) {
                     const std::uint8_t* b = data + (static_cast<std::size_t>(by) * bw + bx) * blockBytes;
-                    if (dxt5) { DecodeBlockAlpha(b, alpha); DecodeBlockBC1(b + 8, true, px); }
-                    else      { DecodeBlockBC1(b, false, px); }
+                    if (kind == Kind::BC7)      { BC7::DecodeBlock(b, px); }
+                    else if (kind == Kind::BC3) { DecodeBlockAlpha(b, alpha); DecodeBlockBC1(b + 8, true, px); }
+                    else                        { DecodeBlockBC1(b, false, px); }
                     for (int r = 0; r < 4; ++r)
                         for (int c = 0; c < 4; ++c) {
                             std::uint32_t x = bx * 4 + c, y = by * 4 + r;
                             if (x >= W || y >= H) continue;
                             std::uint8_t* o = img.rgba.data() + (static_cast<std::size_t>(y) * W + x) * 4;
                             o[0] = px[r*4+c][0]; o[1] = px[r*4+c][1]; o[2] = px[r*4+c][2];
-                            o[3] = dxt5 ? alpha[r*4+c] : px[r*4+c][3];
+                            o[3] = kind == Kind::BC3 ? alpha[r*4+c] : px[r*4+c][3];
                         }
                 }
+        } else if (kind == Kind::RGBA8 || kind == Kind::BGRA8) {   // DX10 byte-order
+            if (static_cast<std::size_t>(W) * H * 4 > avail) return img;
+            img.rgba.resize(static_cast<std::size_t>(W) * H * 4);
+            const bool swap = kind == Kind::BGRA8;
+            for (std::size_t i = 0; i < static_cast<std::size_t>(W) * H; ++i) {
+                const std::uint8_t* p = data + i * 4;
+                img.rgba[i*4+0] = swap ? p[2] : p[0];
+                img.rgba[i*4+1] = p[1];
+                img.rgba[i*4+2] = swap ? p[0] : p[2];
+                img.rgba[i*4+3] = p[3];
+            }
         } else if (pfFlags & 0x40) {                               // uncompressed RGB(A)
             if (rd32(d + 88) != 32) return img;                    // 32bpp only
             const std::uint32_t mr = rd32(d + 92), mg = rd32(d + 96), mb = rd32(d + 100), ma = rd32(d + 104);
@@ -580,17 +616,20 @@ namespace SB::TexCodec
             for (int i = 0; i < 6; ++i) out[2 + i] = static_cast<std::uint8_t>((bits >> (8 * i)) & 0xFF);
         }
 
-        std::vector<std::uint8_t> CompressBC(const Image& img, bool bc3)
+        std::vector<std::uint8_t> CompressBC(const Image& img, DDSFormat fmt)
         {
             std::uint32_t bw = (img.width + 3) / 4, bh = (img.height + 3) / 4;
-            std::vector<std::uint8_t> out(static_cast<std::size_t>(bw) * bh * (bc3 ? 16 : 8));
+            const bool bc1 = fmt == DDSFormat::BC1;
+            std::vector<std::uint8_t> out(static_cast<std::size_t>(bw) * bh * (bc1 ? 8 : 16));
             std::uint8_t px[16][4];
             std::size_t o = 0;
             for (std::uint32_t by = 0; by < bh; ++by)
                 for (std::uint32_t bx = 0; bx < bw; ++bx) {
                     FetchBlock(img, bx, by, px);
-                    if (bc3) { EncodeBlockAlpha(px, out.data() + o); o += 8; }
-                    EncodeBlockBC1(px, out.data() + o); o += 8;
+                    if (fmt == DDSFormat::BC7)      { BC7::EncodeBlockMode6(px, out.data() + o); o += 16; }
+                    else if (fmt == DDSFormat::BC3) { EncodeBlockAlpha(px, out.data() + o); o += 8;
+                                                      EncodeBlockBC1(px, out.data() + o); o += 8; }
+                    else                            { EncodeBlockBC1(px, out.data() + o); o += 8; }
                 }
             return out;
         }
@@ -641,8 +680,19 @@ namespace SB::TexCodec
             char fc[5] = { static_cast<char>(fourCC & 0xFF), static_cast<char>((fourCC >> 8) & 0xFF),
                            static_cast<char>((fourCC >> 16) & 0xFF), static_cast<char>((fourCC >> 24) & 0xFF), 0 };
             info.format = fc;
+            if (info.format == "DX10" && len >= 148) {   // name the DXGI format
+                switch (rd32(d + 128)) {
+                case 71: case 72: info.format = "DX10/BC1"; break;
+                case 77: case 78: info.format = "DX10/BC3"; break;
+                case 98: case 99: info.format = "DX10/BC7"; break;
+                case 28: case 29: info.format = "DX10/RGBA8"; break;
+                case 87: case 91: info.format = "DX10/BGRA8"; break;
+                default: info.format = "DX10/" + std::to_string(rd32(d + 128)); break;
+                }
+            }
             info.compressed = info.format == "DXT1" || info.format == "DXT2" || info.format == "DXT3" ||
-                              info.format == "DXT4" || info.format == "DXT5" || info.format == "DX10" ||
+                              info.format == "DXT4" || info.format == "DXT5" ||
+                              info.format.compare(0, 4, "DX10") == 0 ||
                               info.format == "ATI1" || info.format == "ATI2" || info.format == "BC4U" || info.format == "BC5U";
         } else {
             info.format = "RGB" + std::to_string(rd32(d + 88));
@@ -687,8 +737,8 @@ namespace SB::TexCodec
                  w = w > 1 ? w / 2 : 1, h = h > 1 ? h / 2 : 1) ++levels;
 
         const bool bc = fmt != DDSFormat::RGBA8;
-        const bool bc3 = fmt == DDSFormat::BC3;
-        const std::uint32_t blockBytes = bc3 ? 16 : 8;
+        const bool bc7 = fmt == DDSFormat::BC7;
+        const std::uint32_t blockBytes = fmt == DDSFormat::BC1 ? 8 : 16;
 
         out.reserve(128 + img.rgba.size() * (mipmaps ? 4 : 3) / 3 / (bc ? 4 : 1));
         out.push_back('D'); out.push_back('D'); out.push_back('S'); out.push_back(' ');
@@ -707,7 +757,8 @@ namespace SB::TexCodec
         wr32(out, 32);                                   // pixelformat size
         if (bc) {
             wr32(out, 0x4);                              // DDPF_FOURCC
-            wr32(out, bc3 ? 0x35545844u : 0x31545844u);  // "DXT5" / "DXT1"
+            wr32(out, bc7 ? 0x30315844u                  // "DX10" (ext header below)
+                 : fmt == DDSFormat::BC3 ? 0x35545844u : 0x31545844u);   // "DXT5" / "DXT1"
             wr32(out, 0); wr32(out, 0); wr32(out, 0); wr32(out, 0); wr32(out, 0);
         } else {
             wr32(out, 0x1 | 0x40);                       // DDPF_ALPHAPIXELS|DDPF_RGB
@@ -724,10 +775,18 @@ namespace SB::TexCodec
         wr32(out, 0); wr32(out, 0); wr32(out, 0);        // caps2..4
         wr32(out, 0);                                    // reserved2
 
+        if (bc7) {                                       // DXT10 extension header
+            wr32(out, 98);                               // DXGI_FORMAT_BC7_UNORM
+            wr32(out, 3);                                // D3D10_RESOURCE_DIMENSION_TEXTURE2D
+            wr32(out, 0);                                // miscFlag
+            wr32(out, 1);                                // arraySize
+            wr32(out, 0);                                // miscFlags2 (alpha mode unknown)
+        }
+
         Image level = img;
         for (std::uint32_t i = 0; ; ++i) {
             if (bc) {
-                auto blocks = CompressBC(level, bc3);
+                auto blocks = CompressBC(level, fmt);
                 out.insert(out.end(), blocks.begin(), blocks.end());
             } else {
                 out.insert(out.end(), level.rgba.begin(), level.rgba.end());

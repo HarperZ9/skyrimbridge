@@ -325,7 +325,8 @@ namespace SB::PapyrusBridge
     // output extension: .dds = mipmapped uncompressed RGBA8, .tga = 32-bit TGA
     // (the DDS -> editable lane).
     // cgf "SkyrimBridge.ConvertTextureFmt" "in.png" "out.dds" "BC3"  writes
-    // block-compressed DDS ("BC1" opaque / "BC3" with alpha / "RGBA8").
+    // block-compressed DDS ("BC1" opaque / "BC3" with alpha / "BC7" DX10
+    // header, mode-6 baseline / "RGBA8").
 
     static bool ConvertTexture(RE::StaticFunctionTag*, RE::BSFixedString a_in, RE::BSFixedString a_out)
     {
@@ -361,8 +362,9 @@ namespace SB::PapyrusBridge
         auto fmt = TexCodec::DDSFormat::RGBA8;
         if (_stricmp(a_fmt.c_str(), "BC1") == 0)      fmt = TexCodec::DDSFormat::BC1;
         else if (_stricmp(a_fmt.c_str(), "BC3") == 0) fmt = TexCodec::DDSFormat::BC3;
+        else if (_stricmp(a_fmt.c_str(), "BC7") == 0) fmt = TexCodec::DDSFormat::BC7;
         else if (_stricmp(a_fmt.c_str(), "RGBA8") != 0) {
-            SKSE::log::warn("TextureCodec: unknown format '{}' (BC1/BC3/RGBA8)", a_fmt.c_str());
+            SKSE::log::warn("TextureCodec: unknown format '{}' (BC1/BC3/BC7/RGBA8)", a_fmt.c_str());
             return false;
         }
         bool ok = TexCodec::Convert(a_in.c_str(), a_out.c_str(), fmt);

@@ -167,9 +167,10 @@ Nothing re-derived from the DRM'd exe.
   exactly-representable blocks; DDS structure + mip math; TGA write via PIL
   read-back. The BC interpolation arithmetic was locked empirically against
   PIL first (truncating /3, /2, /7, /5).
-HONEST NULLS: BC7, DX10-header DDS, cubemaps/volumes, DDS mip-chain read
-beyond the top level, PNG/BMP write, and the runtime texture-load
-substitution hook are NOT done.
+HONEST NULLS: BC4/BC5/BC6H, cubemaps/volumes/arrays, DDS mip-chain read
+beyond the top level, and PNG/BMP write are NOT done; sRGB payloads pass
+through unconverted. (BC7 + DX10-header DDS landed 2026-07-16 late, lane
+B7 remainder; the runtime texture-load hook is built and gated OFF, B8.)
 
 ### 3d. Config architecture (ours, not theirs)
 `src/core/SBConfig.h` = one flat-INI dialect (`[Section]`, `Key = Value`, `;`
@@ -250,7 +251,17 @@ confidence are labeled honestly.
    default-on in `ConvertToDDS`, single-mip layout preserved otherwise.
 7. ~~**BC1/BC3 block compression**~~ DONE 2026-07-16 (encode + decode, PIL-exact
    decode model, baseline encoder tier; DDS read + TGA write landed with it).
-   OPEN remainder: BC7 (genuinely hard to do well) and DX10-header DDS.
+   ~~OPEN remainder: BC7 and DX10-header DDS~~ DONE 2026-07-16 late:
+   `src/core/TextureBC7.{h,cpp}` decodes all 8 BC7 modes per the D3D11 spec
+   (partition/anchor tables machine-extracted from DirectXTex, and the test
+   harness re-parses them out of the shipped .cpp so the compiled data is
+   what gets verified); encode is mode 6, baseline tier, stated in-source.
+   DX10-header DDS read (BC1/BC3/BC7/RGBA8/BGRA8; cubemaps/arrays declined)
+   and BC7 DX10 write, wired through ConvertTextureFmt("BC7"),
+   `[TextureConvert] Format = BC7`, and the command channel (argInt 3).
+   Offline receipt: `tests/validate_bc7_codec.py`, 92/92 (8-mode random-block
+   fuzz + 70+ real modlist BC7 files byte-exact vs PIL). Remaining honest
+   nulls: BC4/BC5/BC6H, cubemaps/volumes/arrays, sRGB passthrough only.
 8. ~~**The runtime texture-substitution hook (the payoff).**~~ BUILT 2026-07-16,
    game-bound validation pending. Two halves, both `[Native]`-gated OFF:
    - `TextureAutoConvert` (`src/core/TextureAutoConvert.{h,cpp}`): background

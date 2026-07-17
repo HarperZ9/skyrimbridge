@@ -51,6 +51,7 @@ add_commonlibsse_plugin(
         src/core/TextureCodec.cpp
         src/core/Inflate.cpp
         src/core/TextureAutoConvert.cpp
+        src/core/TextureBC7.cpp
         src/core/TextureLoadHook.cpp
         src/core/ModelCodec.cpp
         src/core/BridgeCommand.cpp
