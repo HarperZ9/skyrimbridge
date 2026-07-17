@@ -86,7 +86,7 @@ almost never necessary because CommonLib covers it.
 
 ## 3. What is built, compiled, and installed (the current state)
 
-Repo: `C:\dev\skyrimbridge\` (50+ core sources, 26 Papyrus natives). Build with
+Repo: `C:\dev\skyrimbridge\` (50+ core sources, 29 Papyrus natives). Build with
 VS18 + CommonLibSSE-NG 3.7.0 (static x64 triplet). Installed DLL target:
 `E:\Modlists\SkyGroundChronicles\mods\SkyrimBridge\SKSE\Plugins\SkyrimBridge.dll`.
 
@@ -232,9 +232,15 @@ confidence are labeled honestly.
    that form's fields; writes `dumps/schema-<name>.txt` + log).
 3. ~~Stricter Verify mode~~ DONE 2026-07-16: `EngineReflectVerifyStrict`,
    separate opt-in native since it mutates.
-4. Structured/variant records: a purpose-built walker for TESRegionData
-   subrecords (weather lists, map, objects), which a flat schema cannot express.
-   (moderate)
+4. ~~Structured/variant records~~ DONE 2026-07-16: `RegionWalker`
+   (`src/core/RegionWalker.{h,cpp}`) dumps every CommonLib-typed TESRegionData
+   subrecord (Weather lists with chances/globals, Sound lists, Map name, Land
+   icon; Objects/Grass/Imposter listed by type+priority, honestly not decoded:
+   no CommonLib layout). One bounded write: `RegionSetWeatherChance` /
+   `RegionApply` edit chances on EXISTING entries only, no list surgery.
+   Natives: RegionDump / RegionSetWeatherChance / RegionApply. Game-bound
+   validation (live-form data source). **Lane A is COMPLETE** except new
+   schema types as needs arise.
 
 **Lane B: complete the texture pipeline (the operator's explicit asset goal).**
 5. ~~**PNG decode**~~ DONE 2026-07-16: from-scratch inflate (`Inflate.{h,cpp}`)

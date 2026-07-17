@@ -44,6 +44,7 @@ add_commonlibsse_plugin(
 
         # Engine-exposure spine + recovered binary patches
         src/core/EngineReflect.cpp
+        src/core/RegionWalker.cpp
         src/core/EngineFixes.cpp
 
         # Native foreign-format texture codec (non-.dds asset integration)

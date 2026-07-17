@@ -22,6 +22,7 @@
 #include "WeatherEditor.h"
 #include "KreateProfile.h"
 #include "EngineReflect.h"
+#include "RegionWalker.h"
 #include "TextureCodec.h"
 #include <RE/Skyrim.h>
 #include <SKSE/SKSE.h>
@@ -267,6 +268,55 @@ namespace SB::PapyrusBridge
         return lines;
     }
 
+    // ── Region walker natives (structured TESRegionData subrecords) ──────
+    // cgf "SkyrimBridge.RegionDump" 0x<id>  -> dumps/<id>.region.ini
+    // (weather list with chances, sounds, map name, land icon). Edit the
+    // WeatherChance lines, then RegionApply. Writes are BOUNDED: chance edits
+    // on existing entries only, never list surgery.
+
+    static RE::BSFixedString RegionDump(RE::StaticFunctionTag*, int32_t a_formID)
+    {
+        auto text = RegionWalker::Dump(static_cast<RE::FormID>(a_formID));
+        if (text.empty()) {
+            SKSE::log::warn("RegionWalker: 0x{:08X} is not a region", a_formID);
+            return RE::BSFixedString("");
+        }
+        std::error_code ec;
+        std::filesystem::create_directories(kReflectDumpDir, ec);
+        char name[96];
+        std::snprintf(name, sizeof name, "%s/%08X.region.ini", kReflectDumpDir, a_formID);
+        std::ofstream out(name);
+        if (out) out << text;
+        SKSE::log::info("RegionWalker: dumped 0x{:08X} -> {}", a_formID, name);
+        return RE::BSFixedString(name);
+    }
+
+    static int32_t RegionSetWeatherChance(RE::StaticFunctionTag*, int32_t a_regionID,
+                                          int32_t a_weatherID, int32_t a_chance)
+    {
+        int n = RegionWalker::SetWeatherChance(static_cast<RE::FormID>(a_regionID),
+                                               static_cast<RE::FormID>(a_weatherID),
+                                               static_cast<std::uint32_t>(std::max(a_chance, 0)));
+        SKSE::log::info("RegionWalker: 0x{:08X} weather 0x{:08X} chance -> {} ({} entries)",
+                        a_regionID, a_weatherID, a_chance, n);
+        return n;
+    }
+
+    static int32_t RegionApply(RE::StaticFunctionTag*, int32_t a_formID)
+    {
+        char name[96];
+        std::snprintf(name, sizeof name, "%s/%08X.region.ini", kReflectDumpDir, a_formID);
+        std::ifstream in(name);
+        if (!in) {
+            SKSE::log::warn("RegionWalker: no dump at {}", name);
+            return 0;
+        }
+        std::stringstream b; b << in.rdbuf();
+        int n = RegionWalker::Apply(static_cast<RE::FormID>(a_formID), b.str());
+        SKSE::log::info("RegionWalker: applied {} weather-chance edits to 0x{:08X}", n, a_formID);
+        return n;
+    }
+
     // ── Texture codec natives (non-.dds asset integration) ───────────────
     // cgf "SkyrimBridge.ConvertTexture" "in.png" "out.dds"  (paths game-relative
     // or absolute). Decodes PNG/TGA/BMP/DDS (incl. DXT1/DXT5) and writes by
@@ -335,10 +385,14 @@ namespace SB::PapyrusBridge
         vm->RegisterFunction("EngineReflectVerifyStrict", "SkyrimBridge", EngineReflectVerifyStrict);
         vm->RegisterFunction("EngineReflectList",         "SkyrimBridge", EngineReflectList);
 
+        vm->RegisterFunction("RegionDump",             "SkyrimBridge", RegionDump);
+        vm->RegisterFunction("RegionSetWeatherChance", "SkyrimBridge", RegionSetWeatherChance);
+        vm->RegisterFunction("RegionApply",            "SkyrimBridge", RegionApply);
+
         vm->RegisterFunction("ConvertTexture",      "SkyrimBridge", ConvertTexture);
         vm->RegisterFunction("ConvertTextureFmt",   "SkyrimBridge", ConvertTextureFmt);
 
-        SKSE::log::info("PapyrusBridge: registered 26 native functions under 'SkyrimBridge'");
+        SKSE::log::info("PapyrusBridge: registered 29 native functions under 'SkyrimBridge'");
         return true;
     }
 }
