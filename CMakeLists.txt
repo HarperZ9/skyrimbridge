@@ -55,6 +55,7 @@ add_commonlibsse_plugin(
         src/core/TextureLoadHook.cpp
         src/core/ConvexHull.cpp
         src/core/CollisionMaterial.cpp
+        src/core/CompressedMesh.cpp
         src/core/ModelCodec.cpp
         src/core/ModelSpawn.cpp
         src/core/BridgeCommand.cpp

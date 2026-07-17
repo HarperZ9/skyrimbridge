@@ -498,6 +498,23 @@ category table: `docs/PAIN-POINTS-ASSESSMENT-2026-07.md`. Build order:
     remains the approximation for props; MOPP is for genuinely concave
     walkable statics. Next concrete lane if pursued: the
     bhkCompressedMeshShape builder (offline-provable half).
+26. ~~Reverse bhkCompressedMeshShapeData~~ DONE 2026-07-17
+    (`docs/CMSD-FORMAT.md`): the offline half of exact mesh collision, the
+    geometry the engine narrowphase walks. A field-exact parser round-trips
+    the WHOLE corpus byte-for-byte: 29,725 blocks across 28,474 NIFs, 100%
+    exact-consume and 100% byte-exact re-serialize. Layout + invariants
+    recovered (head 17/18/0x3FFFF/0x1FFFF, error=0.001 = the u16 quant step,
+    materialType 1; per-chunk translation + u16 verts + list/strip indices +
+    per-chunk SkyrimHavokMaterial). `src/core/CompressedMesh.{h,cpp}` builds
+    a single-chunk CMSD from a mesh (u16-quantized, list triangles, chosen
+    material, span-limited to 65.535 units/axis). Offline-proven:
+    `tests/validate_cmsd.py`, 8/8 (real-file round-trip, builder decodes to
+    input within 0.001 on cube/L/real-mesh, span refusal, source
+    consistency). NOT yet wired to spawn: a CMSD alone does not collide, the
+    chain needs a MOPP tree over it (the free niftools Havok tool, game-bound
+    finalize; docs/MOPP-INVESTIGATION.md). Next: assemble the
+    bhkCompressedMeshShape + bhkMoppBvTreeShape chain as a file-output option
+    with the NifSkope "Update MOPP Code" finalize workflow.
 
 **Lane E: close the honest nulls already on record.**
 12. ~~Reverse `AELAS.dll`'s hooks / sun repositioning~~ DONE 2026-07-16 in two
