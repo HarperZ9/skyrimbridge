@@ -481,8 +481,23 @@ category table: `docs/PAIN-POINTS-ASSESSMENT-2026-07.md`. Build order:
     18/18 (union covers every vertex, phantom notch collision 0.44->0.08 on
     an L-solid, container round-trip). The single-hull path stays
     byte-identical (F19 receipt still 19/19). Game-bound: walk a spawned
-    decomposed hull (protocol section 11). MOPP next (verify-first: decode
-    the real opcode dialect, builder + interpreter as the offline oracle).
+    decomposed hull (protocol section 11).
+25. ~~Exact concave mesh collision (MOPP) investigation~~ DONE 2026-07-17,
+    verdict in `docs/MOPP-INVESTIGATION.md`: BUILDABLE in two halves,
+    neither of which is "reimplement Havok." Verified against primary
+    sources that every open tool (NifMopp, Mopper, PyFFI) generates MOPP by
+    wrapping Havok's own `hkpMoppUtility` via the free `mopper.exe`; no open
+    builder OR interpreter exists, so a from-scratch reimplementation has no
+    reference and a game-bound oracle (not worth it). The buildable path:
+    (a) reverse `bhkCompressedMeshShapeData` and emit the mesh geometry
+    ourselves (offline-provable; parsed a real 2886-byte block, layout
+    recoverable, same discipline as C9/F19), (b) invoke the free `mopper.exe`
+    for the one proprietary bytecode step (tool integration), (c) assemble
+    the chain. This corrects the "MOPP out of scope" framing to "not yet,
+    and here is exactly what it takes." The shipped convex decomposition
+    remains the approximation for props; MOPP is for genuinely concave
+    walkable statics. Next concrete lane if pursued: the
+    bhkCompressedMeshShape builder (offline-provable half).
 
 **Lane E: close the honest nulls already on record.**
 12. ~~Reverse `AELAS.dll`'s hooks / sun repositioning~~ DONE 2026-07-16 in two
