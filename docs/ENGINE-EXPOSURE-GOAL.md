@@ -86,7 +86,7 @@ almost never necessary because CommonLib covers it.
 
 ## 3. What is built, compiled, and installed (the current state)
 
-Repo: `C:\dev\skyrimbridge\` (50+ core sources, 30 Papyrus natives). Build with
+Repo: `C:\dev\skyrimbridge\` (50+ core sources, 31 Papyrus natives). Build with
 VS18 + CommonLibSSE-NG 3.7.0 (static x64 triplet). Installed DLL target:
 `E:\Modlists\SkyGroundChronicles\mods\SkyrimBridge\SKSE\Plugins\SkyrimBridge.dll`.
 
@@ -277,12 +277,24 @@ confidence are labeled honestly.
    `textures\` path with no `.dds`, confirm it renders + check
    SkyrimBridge.log for "TextureLoadHook: ... -> texcache/". (game-bound)
 
-**Lane C: the model pipeline (R&D, the ambitious 20%).**
-9. **glTF / OBJ static-mesh import to runtime NiObject graphs.** Construct
-   BSTriShape/BSGeometry from foreign meshes (vertices, normals, tangents, UVs)
-   + BSLightingShaderProperty materials. Start static meshes only; defer skinned
-   and animated. The pragmatic 80% alternative is an offline glTF->nif converter
-   (the nif runtime format is community-reversed: nifly/nifxml). (hard/R&D)
+**Lane C: the model pipeline.**
+9. ~~**glTF / OBJ static-mesh import**~~ the pragmatic 80% DONE 2026-07-16:
+   `ModelCodec` (`src/core/ModelCodec.{h,cpp}`) parses OBJ + glTF/GLB (minimal
+   zero-dep JSON reader; float POSITION/NORMAL/TEXCOORD + u16/u32 indices;
+   external/embedded/base64 buffers) and emits a valid Skyrim SE NIF
+   (20.2.0.7 / user12 / bs100): BSFadeNode -> BSTriShape +
+   BSLightingShaderProperty + BSShaderTextureSet. The byte layout reproduces a
+   real shipping SSE static mesh field-for-field (vertexDesc
+   0x0003B00007650408, 32-byte full-precision vertex, particleData trailer), so
+   it is engine-loadable by construction. Normals (area-weighted) and tangents
+   (Lengyel) are computed when absent. Native `ConvertModel(in,out)`. Validated
+   offline by `tests/validate_model_codec.py` (21 checks): the emitted NIF
+   re-parses with an independent reader, geometry round-trips full-float exact,
+   and our decoder consumes a real modlist BSTriShape byte-for-byte.
+   HONEST NULLS (the ambitious 20%, deferred R&D): the RUNTIME NiObject-graph
+   construction path (build BSTriShape/BSGeometry live in memory rather than
+   emit a file); skinned/animated meshes; multi-shape files (first
+   primitive/group only); collision (bhk*) generation; Draco/sparse glTF.
 
 **Lane D: expose it as a real utility surface.**
 10. Broaden the surface beyond Papyrus: the existing shared-memory channel

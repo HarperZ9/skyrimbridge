@@ -25,6 +25,7 @@
 #include "RegionWalker.h"
 #include "TextureCodec.h"
 #include "TextureAutoConvert.h"
+#include "ModelCodec.h"
 #include <RE/Skyrim.h>
 #include <SKSE/SKSE.h>
 #include <cstring>
@@ -345,6 +346,15 @@ namespace SB::PapyrusBridge
         return static_cast<int32_t>(r.converted);
     }
 
+    // cgf "SkyrimBridge.ConvertModel" "in.obj" "out.nif"  — foreign static mesh
+    // (OBJ / glTF / GLB) -> Skyrim SE NIF (BSTriShape). Static single-shape only.
+    static bool ConvertModel(RE::StaticFunctionTag*, RE::BSFixedString a_in, RE::BSFixedString a_out)
+    {
+        bool ok = ModelCodec::ConvertToNIF(a_in.c_str(), a_out.c_str());
+        SKSE::log::info("ModelCodec: {} -> {} : {}", a_in.c_str(), a_out.c_str(), ok ? "ok" : "failed");
+        return ok;
+    }
+
     static bool ConvertTextureFmt(RE::StaticFunctionTag*, RE::BSFixedString a_in,
                                   RE::BSFixedString a_out, RE::BSFixedString a_fmt)
     {
@@ -405,8 +415,9 @@ namespace SB::PapyrusBridge
         vm->RegisterFunction("ConvertTexture",      "SkyrimBridge", ConvertTexture);
         vm->RegisterFunction("ConvertTextureFmt",   "SkyrimBridge", ConvertTextureFmt);
         vm->RegisterFunction("TextureScanNow",      "SkyrimBridge", TextureScanNow);
+        vm->RegisterFunction("ConvertModel",        "SkyrimBridge", ConvertModel);
 
-        SKSE::log::info("PapyrusBridge: registered 30 native functions under 'SkyrimBridge'");
+        SKSE::log::info("PapyrusBridge: registered 31 native functions under 'SkyrimBridge'");
         return true;
     }
 }
