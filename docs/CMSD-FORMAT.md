@@ -72,4 +72,27 @@ over this data via the free niftools tool.
 Honest bound: the builder is offline-provable to byte-round-trip and to
 decode back to the input mesh within the 0.001 quantization; the assembled
 `bhkCompressedMeshShape` + MOPP + rigid-body chain accepting in-engine is
-game-bound and needs the MOPP tool integration (not yet built).
+game-bound and needs the MOPP finalize step (below).
+
+## The chain (built) and the finalize workflow
+
+`ConvertModelMeshCollision` / `model.meshcollision` emit the full file:
+root -> `bhkCollisionObject` -> `bhkRigidBody` -> `bhkMoppBvTreeShape` ->
+`bhkCompressedMeshShape` -> `bhkCompressedMeshShapeData`, alongside the
+visual `BSTriShape`. The `bhkMoppBvTreeShape` ships with an **empty MOPP**
+(`moppDataSize = 0`, `buildType = 2` BUILD_NOT_SET). Both wrapper layouts
+were recovered byte-exact from real files (CMS 56 bytes; MOPP 41-byte header
+= shape ref + 3 unknown ints + f32 1.0 + moppDataSize + origin + scale +
+buildType byte, then the bytecode).
+
+**This file does not collide until the MOPP is finalized.** Open it in
+NifSkope and run Spells -> Havok -> "Update MOPP Code" (which invokes the
+free niftools Havok tool to generate the MOPP over our geometry), then save.
+That is the one proprietary step, the same one every collision tool relies
+on; we produce the hard geometry it needs. File output only, never live
+spawn (a live spawn of an empty-MOPP chain would crash on load).
+
+Receipt: `tests/validate_mesh_collision_chain.py` (9 checks) assembles the
+chain with a ported writer and walks it back: every block type and ref, CMS
+radius/data ref, the empty-MOPP placeholder, and the CMSD decoding to the
+input mesh within 0.001.

@@ -328,6 +328,30 @@ reacts to. Visual footprint depressions in snow are a separate system (the
 snow shader / a footprints mod), not the collision material, so their
 absence is not a failure of this feature.
 
+## 13. Exact mesh collision (finalize workflow), file output
+
+This produces a NIF that is NOT game-ready until you finalize the MOPP. Do
+not spawn it live before finalizing (it would crash).
+
+**Steps:** convert a mesh with exact collision and a material. In-game:
+`cgf "SkyrimBridge.ConvertModelMeshCollision" "Data/x.obj" "Data/x.nif" "stone"`,
+or over the channel:
+`python tools\sb_command_client.py model.meshcollision Data/x.obj Data/x.nif`
+(add `--int 65536` for stone = material index 1 << 16). Then open `x.nif`
+in NifSkope, run Spells -> Havok -> "Update MOPP Code", and save.
+
+**Pass (offline first):** NifSkope loads `x.nif` without error, shows the
+`bhkCompressedMeshShape` chain, and "Update MOPP Code" completes and fills a
+non-empty MOPP (the block grows). **Pass (in-game):** place the finalized
+NIF as a static and walk on it. Unlike the convex/decomposed collision, a
+concave shape's true openings are walkable and the solid faces stop you
+(the exact-geometry payoff a hull list only approximates). Footstep sounds
+match the chosen material.
+
+**Honest bound:** if NifSkope's "Update MOPP Code" errors on the emitted
+chain, that is the finding to record (the wrapper layout or an unknown field
+needs a fix); the geometry block itself is corpus-proven byte-exact.
+
 ---
 
 ## After a PASS

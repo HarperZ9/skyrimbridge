@@ -74,14 +74,19 @@ namespace SB::ModelCodec
     // collisionMaterial (0 = the shipped WOOD default) is the
     // SkyrimHavokMaterial hash driving footstep/impact feel (see
     // CollisionMaterial.h; e.g. snow, stone, ice).
+    // meshCollision emits exact concave collision: a bhkCompressedMeshShape
+    // chain over the mesh geometry with an EMPTY MOPP placeholder. File
+    // output only, not game-ready until NifSkope "Update MOPP Code"
+    // finalizes the MOPP (docs/CMSD-FORMAT.md, docs/MOPP-INVESTIGATION.md).
     std::vector<std::uint8_t> WriteNIF(const Mesh& m, bool treeMode = false,
                                        bool collision = false, int collisionPieces = 1,
-                                       std::uint32_t collisionMaterial = 0);
+                                       std::uint32_t collisionMaterial = 0,
+                                       bool meshCollision = false);
 
     // Convenience: any supported input -> .nif on disk.
     bool ConvertToNIF(const std::filesystem::path& in, const std::filesystem::path& out,
                       bool treeMode = false, bool collision = false, int collisionPieces = 1,
-                      std::uint32_t collisionMaterial = 0);
+                      std::uint32_t collisionMaterial = 0, bool meshCollision = false);
 
     // Half-float codec (exposed for the offline validator).
     std::uint16_t FloatToHalf(float f);

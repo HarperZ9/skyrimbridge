@@ -515,6 +515,23 @@ category table: `docs/PAIN-POINTS-ASSESSMENT-2026-07.md`. Build order:
     finalize; docs/MOPP-INVESTIGATION.md). Next: assemble the
     bhkCompressedMeshShape + bhkMoppBvTreeShape chain as a file-output option
     with the NifSkope "Update MOPP Code" finalize workflow.
+27. ~~Assemble the mesh-collision chain + finalize workflow~~ DONE
+    2026-07-17: exact concave mesh collision, file output. CMS (56 B) and
+    MOPP (41-B header + buildType byte) layouts recovered byte-exact from
+    real files. ModelCodec meshCollision mode emits the full chain: root ->
+    collisionObject -> rigidBody -> bhkMoppBvTreeShape (EMPTY MOPP) ->
+    bhkCompressedMeshShape -> CMSD, alongside the visual BSTriShape. Surfaces:
+    ConvertModelMeshCollision native (41st), model.meshcollision verb.
+    File-output ONLY (empty-MOPP chain would crash if live-spawned); the
+    modder runs NifSkope "Update MOPP Code" to generate the MOPP over our
+    geometry, the one proprietary step. Offline-proven:
+    `tests/validate_mesh_collision_chain.py`, 9/9 (chain refs, empty-MOPP
+    placeholder, CMSD decodes to input within 0.001). Convex path
+    byte-unchanged (all 5 prior collision/model receipts still green). This
+    completes exact mesh collision end to end except the game-bound MOPP
+    finalize + walk-test (protocol section 13). We now emit the hard geometry
+    the community's tools could never generate openly; NifSkope adds MOPP
+    one-click.
 
 **Lane E: close the honest nulls already on record.**
 12. ~~Reverse `AELAS.dll`'s hooks / sun repositioning~~ DONE 2026-07-16 in two

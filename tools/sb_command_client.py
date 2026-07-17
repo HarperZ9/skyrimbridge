@@ -20,6 +20,9 @@ Usage:
   python sb_command_client.py texture.foliage in.png out.dds --int 2   (+ threshold*256; 0 -> 128)
   python sb_command_client.py texture.scan --int 1                     (1 dry, 0 live)
   python sb_command_client.py model.convert in.obj out.nif    (--int bits: 1 tree, 2 collision)
+  python sb_command_client.py model.meshcollision in.obj out.nif  (exact concave collision;
+                                                       --int bits 16-23 = material index;
+                                                       finalize MOPP in NifSkope, file output)
   python sb_command_client.py model.spawn in.obj      (places at player; MUTATES the
                                                        save; --int bits: 1 tree, 2 collision;
                                                        bits 8-15 = collision piece count;

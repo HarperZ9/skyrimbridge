@@ -462,6 +462,22 @@ namespace SB::PapyrusBridge
         return static_cast<std::int32_t>(CollisionMaterial::ByName(a_name.c_str()));
     }
 
+    // cgf "SkyrimBridge.ConvertModelMeshCollision" "in.obj" "out.nif" "stone"
+    // Exact concave (mesh) collision: emits a bhkCompressedMeshShape chain
+    // with an EMPTY MOPP placeholder. FILE OUTPUT ONLY, and NOT game-ready:
+    // open out.nif in NifSkope and run "Update MOPP Code" (Havok tool) to
+    // generate the MOPP before using it in-game. Never spawned live.
+    static bool ConvertModelMeshCollision(RE::StaticFunctionTag*, RE::BSFixedString a_in,
+                                          RE::BSFixedString a_out, RE::BSFixedString a_material)
+    {
+        const std::uint32_t mat = a_material.empty() ? 0u : CollisionMaterial::ByName(a_material.c_str());
+        bool ok = ModelCodec::ConvertToNIF(a_in.c_str(), a_out.c_str(), false, true, 1, mat, true);
+        SKSE::log::info("ModelCodec: {} -> {} [meshCollision {}] : {} (finalize MOPP in NifSkope)",
+                        a_in.c_str(), a_out.c_str(),
+                        a_material.empty() ? "wood" : a_material.c_str(), ok ? "ok" : "failed");
+        return ok;
+    }
+
     // cgf "SkyrimBridge.SpawnModel" "in.obj"  — the pragmatic runtime-model
     // path. Materializes the mesh under meshes\SkyrimBridge\spawn\ (foreign
     // formats convert; a .nif copies), creates a dynamic Static form whose
@@ -573,8 +589,9 @@ namespace SB::PapyrusBridge
         vm->RegisterFunction("FormChain",              "SkyrimBridge", FormChain);
         vm->RegisterFunction("TextureInfo",            "SkyrimBridge", TextureInfo);
         vm->RegisterFunction("MaterialHash",           "SkyrimBridge", MaterialHash);
+        vm->RegisterFunction("ConvertModelMeshCollision", "SkyrimBridge", ConvertModelMeshCollision);
 
-        SKSE::log::info("PapyrusBridge: registered 40 native functions under 'SkyrimBridge'");
+        SKSE::log::info("PapyrusBridge: registered 41 native functions under 'SkyrimBridge'");
         return true;
     }
 }

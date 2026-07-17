@@ -341,6 +341,7 @@ Console form: `cgf "SkyrimBridge.<name>" <args...>`
 | ConvertModelTree | `bool (string in, string out)` — tree mode: wind vertex colors + Tree_Anim + BSLeafAnimNode root |
 | ConvertModelEx | `bool (string in, string out, bool tree, bool collision, int pieces, string material)` — pieces >= 2 = decomposed bhkListShape; material = SkyrimHavokMaterial name (snow/stone/wood/ice/...) |
 | MaterialHash | `int (string name)` — resolve a SkyrimHavokMaterial name to its hash (0 = unknown) |
+| ConvertModelMeshCollision | `bool (string in, string out, string material)` — exact concave (mesh) collision, file output; emits a bhkCompressedMeshShape chain with an EMPTY MOPP. Finalize in NifSkope "Update MOPP Code" before in-game use |
 | SpawnModel | `int (string in)` — convert + place at the player via the engine loader; returns the ref's FormID (MUTATES the save) |
 
 **Diagnostics**

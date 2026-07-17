@@ -10,6 +10,7 @@
 
 #include "ModelCodec.h"
 #include "ConvexHull.h"
+#include "CompressedMesh.h"
 
 #include <algorithm>
 #include <array>
@@ -147,7 +148,8 @@ namespace SB::ModelCodec
 
     // ── NIF writer ───────────────────────────────────────────────────────
     std::vector<std::uint8_t> WriteNIF(const Mesh& mesh, bool treeMode, bool collision,
-                                       int collisionPieces, std::uint32_t collisionMaterial)
+                                       int collisionPieces, std::uint32_t collisionMaterial,
+                                       bool meshCollision)
     {
         Mesh m = mesh;
         // 0 = the shipped default (WOOD, 0x1DD9C611). That hash is
@@ -207,7 +209,20 @@ namespace SB::ModelCodec
         // dropped; no valid piece -> no collision.
         struct HullPiece { std::vector<Vec3> verts; std::vector<std::array<float, 4>> planes; };
         std::vector<HullPiece> pieces;
-        if (collision) {
+
+        // Exact mesh-collision mode: emit a bhkCompressedMeshShapeData chain
+        // instead of convex. A CMSD alone does not collide; the chain ships
+        // with an EMPTY MOPP placeholder and needs NifSkope "Update MOPP
+        // Code" to finalize before in-game use (docs/MOPP-INVESTIGATION.md,
+        // docs/CMSD-FORMAT.md). File-output only, never live spawn.
+        std::vector<std::uint8_t> cmsdBytes;
+        bool meshColl = false;
+        if (collision && meshCollision) {
+            cmsdBytes = CompressedMesh::Build(m, collMat);
+            meshColl = !cmsdBytes.empty();
+        }
+
+        if (collision && !meshCollision) {
             std::vector<std::vector<Vec3>> groups;
             if (collisionPieces >= 2) {
                 // Densify so large flat triangles do not leave seams between
@@ -236,11 +251,15 @@ namespace SB::ModelCodec
             }
         }
         const int nPieces = static_cast<int>(pieces.size());
-        const bool haveCollision = nPieces > 0;
+        const bool haveCollision = meshColl || nPieces > 0;
         const bool useList = nPieces >= 2;
         const int convexBase = 4;
+        // convex layout: [convex xN][list?][rigid][collObj][bsx]
+        // mesh   layout: [cmsd][cms][mopp][rigid][collObj][bsx]
+        const int cmsdIdx = 4, cmsIdx = 5, moppIdx = 6;
         const int listIdx    = useList ? convexBase + nPieces : -1;
-        const int rigidIdx   = convexBase + nPieces + (useList ? 1 : 0);
+        const int rigidIdx   = meshColl ? convexBase + 3
+                                        : convexBase + nPieces + (useList ? 1 : 0);
         const int collObjIdx = rigidIdx + 1;
         const int bsxIdx     = collObjIdx + 1;
 
@@ -325,8 +344,8 @@ namespace SB::ModelCodec
         // and a real bhkListShape (docs/COLLISION-INVESTIGATION-F18.md).
         // Vertices and plane offsets are in Havok units (game units / ~70).
         std::vector<Buf> convexBufs;
-        Buf listBuf, rigidBuf, collObjBuf, bsxBuf;
-        if (haveCollision) {
+        Buf cmsdBuf, cmsBuf, moppBuf, listBuf, rigidBuf, collObjBuf, bsxBuf;
+        if (haveCollision && !meshColl) {
             constexpr float kInvHavokScale = 1.0f / 69.99125f;
             for (auto& piece : pieces) {
                 Buf cb;
@@ -354,6 +373,32 @@ namespace SB::ModelCodec
                 listBuf.u32(static_cast<std::uint32_t>(nPieces));   // numInts == numSubShapes
                 for (int i = 0; i < nPieces; ++i) listBuf.u32(0);   // per-child filters
             }
+        }
+        if (meshColl) {
+            // Exact mesh-collision chain: CMSD (geometry) -> CMS (wrapper) ->
+            // MOPP (empty placeholder). Layouts recovered byte-exact from
+            // real files (docs/CMSD-FORMAT.md). The MOPP is EMPTY: finalize
+            // with NifSkope "Update MOPP Code" before in-game use.
+            cmsdBuf.raw(reinterpret_cast<const char*>(cmsdBytes.data()), cmsdBytes.size());
+
+            cmsBuf.i32(0);                                   // target
+            cmsBuf.u32(0);                                   // userData
+            cmsBuf.f32(0.005f);                              // radius (corpus-invariant)
+            cmsBuf.u32(0);                                   // per-mesh hash (unused by us)
+            cmsBuf.f32(1); cmsBuf.f32(1); cmsBuf.f32(1); cmsBuf.f32(0);   // scale (1,1,1,0)
+            cmsBuf.f32(0.005f);                              // radiusCopy
+            cmsBuf.f32(1); cmsBuf.f32(1); cmsBuf.f32(1); cmsBuf.f32(0);   // scaleCopy
+            cmsBuf.i32(cmsdIdx);                             // data -> CMSD
+
+            moppBuf.i32(cmsIdx);                             // shape -> CMS
+            moppBuf.u32(0); moppBuf.u32(0); moppBuf.u32(0);  // bvTree unknown ints
+            moppBuf.f32(1.0f);                               // corpus-invariant 1.0
+            moppBuf.u32(0);                                  // moppDataSize = 0 (EMPTY placeholder)
+            moppBuf.f32(0); moppBuf.f32(0); moppBuf.f32(0);  // origin (NifSkope recomputes)
+            moppBuf.f32(0);                                  // scale (NifSkope recomputes)
+            moppBuf.u8(2);                                   // buildType = BUILD_NOT_SET
+        }
+        if (haveCollision) {
 
             // bhkRigidBody: byte template from a known-good layer-1 static
             // (deerskullstatic.nif; machine-extracted, fixed-motion body).
@@ -376,7 +421,7 @@ namespace SB::ModelCodec
                 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
             };
             rigidBuf.raw(reinterpret_cast<const char*>(kRigidBodyTemplate), sizeof(kRigidBodyTemplate));
-            const std::int32_t sref = useList ? listIdx : convexBase;   // rigidbody.shape
+            const std::int32_t sref = meshColl ? moppIdx : (useList ? listIdx : convexBase);   // rigidbody.shape
             rigidBuf.v[0] = sref & 0xFF; rigidBuf.v[1] = (sref >> 8) & 0xFF;
             rigidBuf.v[2] = (sref >> 16) & 0xFF; rigidBuf.v[3] = (sref >> 24) & 0xFF;
 
@@ -393,6 +438,11 @@ namespace SB::ModelCodec
         std::vector<const char*> perBlockType = { treeMode ? "BSLeafAnimNode" : "BSFadeNode",
                                                   "BSTriShape", "BSLightingShaderProperty",
                                                   "BSShaderTextureSet" };
+        if (meshColl) {
+            blocks.push_back(&cmsdBuf); perBlockType.push_back("bhkCompressedMeshShapeData");
+            blocks.push_back(&cmsBuf);  perBlockType.push_back("bhkCompressedMeshShape");
+            blocks.push_back(&moppBuf); perBlockType.push_back("bhkMoppBvTreeShape");
+        }
         for (auto& cb : convexBufs) { blocks.push_back(&cb); perBlockType.push_back("bhkConvexVerticesShape"); }
         if (useList) { blocks.push_back(&listBuf); perBlockType.push_back("bhkListShape"); }
         if (haveCollision) {
@@ -773,11 +823,11 @@ namespace SB::ModelCodec
 
     bool ConvertToNIF(const std::filesystem::path& in, const std::filesystem::path& out,
                       bool treeMode, bool collision, int collisionPieces,
-                      std::uint32_t collisionMaterial)
+                      std::uint32_t collisionMaterial, bool meshCollision)
     {
         Mesh m = LoadFile(in);
         if (!m.valid) return false;
-        auto bytes = WriteNIF(m, treeMode, collision, collisionPieces, collisionMaterial);
+        auto bytes = WriteNIF(m, treeMode, collision, collisionPieces, collisionMaterial, meshCollision);
         if (bytes.empty()) return false;
         std::ofstream f(out, std::ios::binary | std::ios::trunc);
         if (!f) return false;

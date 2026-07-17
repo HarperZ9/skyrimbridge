@@ -93,6 +93,10 @@ namespace SB
     //                  (wind vertex colors + Tree_Anim), 2 = collision; high
     //                  byte (argInt>>8) = collision piece count (>=2 =
     //                  decomposed bhkListShape) -> resultInt = ok
+    //   model.meshcollision arg0 = in, arg1 = out, argInt bits 16-23 =
+    //                  material index. Exact concave collision
+    //                  (bhkCompressedMeshShape) with an EMPTY MOPP; finalize
+    //                  in NifSkope "Update MOPP Code". File output only.
     //   model.spawn    arg0 = in (foreign mesh or .nif), argInt bits as
     //                  model.convert -> resultInt = placed reference FormID
     //                  (0 = failed). MUTATES the save.

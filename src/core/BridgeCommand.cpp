@@ -254,6 +254,12 @@ namespace SB
                                                         (b->argInt & 1) != 0, (b->argInt & 2) != 0, pieces, mat) ? 1 : 0;
                 return b->resultInt ? kCmdOK : kCmdFailed;
             }
+            if (verb == "model.meshcollision") {   // exact mesh collision, file output
+                std::uint32_t mat = CollisionMaterial::ByIndex((b->argInt >> 16) & 0xFF);
+                b->resultInt = ModelCodec::ConvertToNIF(b->arg0, b->arg1, false, true, 1, mat, true) ? 1 : 0;
+                SetText(b, "finalize the MOPP in NifSkope (Update MOPP Code) before in-game use");
+                return b->resultInt ? kCmdOK : kCmdFailed;
+            }
             if (verb == "model.spawn") {           // MUTATES the save (per-op)
                 int pieces = (b->argInt >> 8) & 0xFF; if (pieces < 1) pieces = 1;
                 std::uint32_t mat = CollisionMaterial::ByIndex((b->argInt >> 16) & 0xFF);
