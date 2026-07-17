@@ -28,6 +28,7 @@
 #include "ModelCodec.h"
 #include "ModelSpawn.h"
 #include "CellReport.h"
+#include "ScriptReport.h"
 #include <RE/Skyrim.h>
 #include <SKSE/SKSE.h>
 #include <cstring>
@@ -391,6 +392,19 @@ namespace SB::PapyrusBridge
         return pos != std::string::npos ? std::atoi(text.c_str() + pos + 13) : 0;
     }
 
+    // cgf "SkyrimBridge.ScriptReport"  — live Papyrus VM monitor: overstress
+    // flag, function-message queue depth (the script-lag indicator), running/
+    // latent/frozen stack counts, which script classes are executing right
+    // now, and the per-class instance census. Read-only. Runs on the NEXT
+    // frame (a Papyrus native must not take the VM's own locks); full text
+    // lands in SkyrimBridge/dumps/scriptreport.txt plus a log summary.
+    static bool ScriptReportNative(RE::StaticFunctionTag*)
+    {
+        ScriptReport::Request();
+        SKSE::log::info("ScriptReport: queued; dumps/scriptreport.txt next frame");
+        return true;
+    }
+
     static bool ConvertModelEx(RE::StaticFunctionTag*, RE::BSFixedString a_in, RE::BSFixedString a_out,
                                bool a_tree, bool a_collision)
     {
@@ -508,8 +522,9 @@ namespace SB::PapyrusBridge
         vm->RegisterFunction("ConvertModelEx",         "SkyrimBridge", ConvertModelEx);
         vm->RegisterFunction("SpawnModel",             "SkyrimBridge", SpawnModel);
         vm->RegisterFunction("CellReport",             "SkyrimBridge", CellReportNative);
+        vm->RegisterFunction("ScriptReport",           "SkyrimBridge", ScriptReportNative);
 
-        SKSE::log::info("PapyrusBridge: registered 36 native functions under 'SkyrimBridge'");
+        SKSE::log::info("PapyrusBridge: registered 37 native functions under 'SkyrimBridge'");
         return true;
     }
 }

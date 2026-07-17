@@ -245,7 +245,7 @@ whether a STAT-placed reference sways (vs needing a TREE form) is game-bound.
 
 ---
 
-## 5. Native API reference (36 natives, script name `SkyrimBridge`)
+## 5. Native API reference (37 natives, script name `SkyrimBridge`)
 
 Console form: `cgf "SkyrimBridge.<name>" <args...>`
 
@@ -313,6 +313,7 @@ Console form: `cgf "SkyrimBridge.<name>" <args...>`
 | Native | Signature |
 |---|---|
 | CellReport | `int (())` — read-only census of the player's cell: refs by type, shadow-casting lights (nearest first, plugin-attributed), refs per winning plugin; full text to `dumps/cellreport.txt`; returns the shadow-light count |
+| ScriptReport | `bool (())` — live Papyrus VM monitor: overstress flag, function-message queue depth, running/latent/frozen stacks, executing script classes, per-class instance census; runs next frame (a native must not take the VM's locks); full text to `dumps/scriptreport.txt` |
 
 ---
 
@@ -363,6 +364,7 @@ the mailbox carries the trigger and a bounded 4 KiB text result.
 | `reflect.verify` | `arg0` = `"0x<formid>"`, `argInt` = 1 for strict (MUTATES) | `resultInt` = fields, 0 on failure |
 | `region.dump` | `arg0` = `"0x<region>"` | subrecord dump (also `dumps/<id>.region.ini`) |
 | `cell.report` | — | performance census of the player's cell (shadow lights, refs by type/plugin); full text in `dumps/cellreport.txt` |
+| `script.report` | — | live Papyrus VM monitor (overstress, queue depth, stacks, class census); full text in `dumps/scriptreport.txt` |
 | `region.weather` | `arg0` = region, `arg1` = weather, `argInt` = chance | `resultInt` = entries edited |
 | `texture.convert` | `arg0` = in, `arg1` = out, `argInt` = 0/1/2/3 (RGBA8/BC1/BC3/BC7) | `resultInt` = ok |
 | `texture.foliage` | `arg0` = in, `arg1` = out, `argInt` = fmt \| (threshold << 8), threshold 0 -> 128 | coverage-preserving mips; `resultInt` = ok |

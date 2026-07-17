@@ -249,6 +249,29 @@ shadow-light list is nearest-first.
 nearest shadow lights are the frame cost, the census just replaced the
 manual hunt.
 
+## 9. Papyrus VM monitor (per-op, read-only)
+
+No toggle, no writes. Two surfaces with different timing: the console
+native queues the report for the NEXT frame (`cgf "SkyrimBridge.ScriptReport"`,
+then read `dumps/scriptreport.txt`); the channel verb answers synchronously
+(`python tools\sb_command_client.py script.report`).
+
+**Steps:** run it on a fresh save in an empty interior, then on your oldest
+long-played save in a busy exterior. Compare.
+
+**Pass:** plausible numbers in both (a fresh save shows few running stacks
+and a small instance census; the old save shows more), the top instance
+classes look like your installed script mods, and repeated runs a few
+seconds apart move (runningStacks fluctuates, the census stays near-stable).
+No hitch, stutter, or deadlock when invoked repeatedly, including during
+combat and scripted scenes (the lock-hold windows are short; this is the
+stress case worth trying deliberately).
+
+**The payoff to record:** waitingFunctionMessages under load. Near zero on
+a healthy setup; sustained growth or a set overstressed flag while stutter
+is felt is the live confirmation of script lag, and the executing-class
+list names the suspects while it happens.
+
 ---
 
 ## After a PASS

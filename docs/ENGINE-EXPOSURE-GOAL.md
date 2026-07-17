@@ -426,9 +426,22 @@ category table: `docs/PAIN-POINTS-ASSESSMENT-2026-07.md`. Build order:
     game-bound (protocol section 8). Honest scope: counts and attribution,
     not per-draw GPU timing; the shadow-light list is the community's own
     proven proxy.
-21. Live Papyrus VM monitor over the channel (running/suspended stacks, top
-    script instance counts; ReSaver is post-mortem only). Moderate
-    CommonLib API risk. (open, next)
+21. ~~Live Papyrus VM monitor~~ DONE 2026-07-17:
+    `src/core/ScriptReport.{h,cpp}` + `ScriptReport` native (37th) +
+    `script.report` verb (14th). Live answers to "is my game script-lagged
+    and who is responsible" (ReSaver is post-mortem only): the VM's own
+    overstressed flag, waitingFunctionMessages queue depth (the direct lag
+    indicator), running/latent/frozen stack counts, which script classes are
+    executing RIGHT NOW (top stack frames under runningStacksLock), and the
+    per-class attached-instance census (the save-bloat view, under
+    attachedScriptsLock). Read-only. THREADING CONTRACT: Run() takes the
+    VM's own locks so it executes on the frame thread only; the Papyrus
+    native queues via Request()/Tick() (a native runs inside the VM and must
+    not take its locks); the channel verb runs inline (dispatch is already
+    frame-thread). Overflow/cleanup array sizes are plain u32 reads, torn
+    counts tolerated and stated. Compile-verified against CommonLib's fully
+    typed VirtualMachine layout; the numbers are game-bound (protocol
+    section 9).
 22. Modlist smoke tour: external driver walks the game through N cells via
     the channel collecting log/crash evidence; needs a teleport verb.
     (open, scoped after 21)

@@ -70,6 +70,9 @@ namespace SB
     //   cell.report    (no args) -> resultText = performance census of the
     //                  player's cell (shadow lights, refs by type/plugin);
     //                  full text in dumps/cellreport.txt
+    //   script.report  (no args) -> resultText = live Papyrus VM monitor
+    //                  (overstress, queue depth, stacks, class census);
+    //                  full text in dumps/scriptreport.txt
     //   region.dump    arg0 = "0x<region>"         -> resultText
     //   region.weather arg0 = "0x<region>", arg1 = "0x<weather>", argInt = chance -> resultInt
     //   texture.convert arg0 = in, arg1 = out, argInt = 0|1|2|3 (RGBA8|BC1|BC3|BC7) -> resultInt = ok

@@ -40,6 +40,7 @@
 #include "TextureAutoConvert.h"
 #include "TextureLoadHook.h"
 #include "BridgeCommand.h"
+#include "ScriptReport.h"
 
 // GPU tier
 #include "D3D11Hook.h"
@@ -336,6 +337,10 @@ static void DoFrameUpdate()
     // 3b. External command channel: dispatch one pending request per frame.
     if (SB::BridgeCommand::Get().IsActive())
         SB::BridgeCommand::Get().Poll();
+
+    // 3c. Queued Papyrus-VM reports run here: the frame thread may take the
+    // VM's locks briefly; a Papyrus native must not (see ScriptReport.h).
+    SB::ScriptReport::Tick();
 
     // 4. Phase 4: enbParmLink-compatible expression evaluation
     try {
