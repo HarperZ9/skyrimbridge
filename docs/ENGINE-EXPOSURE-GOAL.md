@@ -442,9 +442,20 @@ category table: `docs/PAIN-POINTS-ASSESSMENT-2026-07.md`. Build order:
     counts tolerated and stated. Compile-verified against CommonLib's fully
     typed VirtualMachine layout; the numbers are game-bound (protocol
     section 9).
-22. Modlist smoke tour: external driver walks the game through N cells via
-    the channel collecting log/crash evidence; needs a teleport verb.
-    (open, scoped after 21)
+22. ~~Modlist smoke tour~~ DONE 2026-07-17: `tools/sb_smoke_tour.py` +
+    two verbs (`game.status` read-only heartbeat returning the current cell
+    FormID with 0 during loads; `game.coc` console-exec teleport via
+    RE::Script SetCommand/CompileAndRun, MUTATES game state). The driver
+    teleports through a cell list, detects landing by cell-id change,
+    settles, captures the cell census and VM monitor summaries per stop,
+    and renders one of three verdicts: PASS, FAILURES (a stop never landed,
+    tour continues), CRASH (channel died, reported at the exact stop).
+    Offline-proven: `tests/validate_smoke_tour.py`, 11/11 against a
+    simulated game (delayed landings, ignored bad targets exactly like the
+    console, mid-tour death). Game-bound: a real tour on a disposable save
+    (protocol section 10); coc targets vary by modlist. "Did my modlist
+    change break anything" is now a scripted tour with evidence.
+    **Lane G fully dispatched (G20-G22).**
 
 **Lane E: close the honest nulls already on record.**
 12. ~~Reverse `AELAS.dll`'s hooks / sun repositioning~~ DONE 2026-07-16 in two

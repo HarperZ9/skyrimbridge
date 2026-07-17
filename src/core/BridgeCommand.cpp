@@ -161,6 +161,43 @@ namespace SB
                 b->resultInt = TexCodec::Convert(b->arg0, b->arg1, fmt) ? 1 : 0;
                 return b->resultInt ? kCmdOK : kCmdFailed;
             }
+            if (verb == "game.status") {         // read-only heartbeat for external drivers
+                auto* player = RE::PlayerCharacter::GetSingleton();
+                auto* cal = RE::Calendar::GetSingleton();
+                auto* cell = player ? player->GetParentCell() : nullptr;
+                if (!cell) {                     // menu or mid-load: keep polling
+                    SetText(b, "no player cell (menu or loading)");
+                    b->resultInt = 0;
+                    return kCmdOK;
+                }
+                const char* edid = cell->GetFormEditorID();
+                const auto pos = player->GetPosition();
+                char msg[192];
+                std::snprintf(msg, sizeof msg,
+                              "cell=0x%08X name=%s interior=%d pos=%.0f,%.0f,%.0f hour=%.2f",
+                              cell->GetFormID(), edid && *edid ? edid : "?",
+                              cell->IsInteriorCell() ? 1 : 0,
+                              pos.x, pos.y, pos.z, cal ? cal->GetHour() : -1.0f);
+                SetText(b, msg);
+                b->resultInt = static_cast<std::int32_t>(cell->GetFormID());
+                return kCmdOK;
+            }
+            if (verb == "game.coc") {            // teleport (MUTATES game state)
+                if (!b->arg0[0]) return kCmdBadArg;
+                RE::Script* script = nullptr;
+                if (auto* factory = RE::IFormFactory::GetFormFactoryByType(RE::FormType::Script))
+                    if (auto* form = factory->Create())
+                        script = form->As<RE::Script>();
+                if (!script) { SetText(b, "script factory unavailable"); return kCmdFailed; }
+                const std::string cmd = std::string("coc ") + b->arg0;
+                script->SetCommand(cmd);
+                script->CompileAndRun(nullptr);  // bad target = console error, no fault
+                delete script;
+                SKSE::log::info("BridgeCommand: {}", cmd);
+                b->resultInt = 1;
+                SetText(b, cmd);
+                return kCmdOK;
+            }
             if (verb == "script.report") {       // read-only Papyrus VM monitor
                 auto text = ScriptReport::Run(); // dispatch runs on the frame thread
                 if (text.empty()) { SetText(b, "VM unavailable"); return kCmdFailed; }

@@ -332,9 +332,12 @@ is needed.
 `src/SB_CommandLayout.h` (the ABI contract, dependency-free; include it from
 any client) + `src/core/BridgeCommand.{h,cpp}` (plugin side). Clients:
 `tools/SkyrimBridgeClient.h` (header-only C++),
-`tools/sb_command_client.py` (zero-compile CLI), and
+`tools/sb_command_client.py` (zero-compile CLI),
 `tools/blender/skyrimbridge_push.py` (Blender push-to-game addon: export the
-selection, `model.spawn`, see it at the player). A second shared-memory
+selection, `model.spawn`, see it at the player), and
+`tools/sb_smoke_tour.py` (modlist regression tour: teleport through a cell
+list collecting census/VM evidence per stop; crash shows up at the exact
+stop). A second shared-memory
 region, `SkyrimBridge_Command`, alongside the one-way game-state region, so an
 external tool drives the engine surface without the in-game console.
 
@@ -365,6 +368,8 @@ the mailbox carries the trigger and a bounded 4 KiB text result.
 | `region.dump` | `arg0` = `"0x<region>"` | subrecord dump (also `dumps/<id>.region.ini`) |
 | `cell.report` | — | performance census of the player's cell (shadow lights, refs by type/plugin); full text in `dumps/cellreport.txt` |
 | `script.report` | — | live Papyrus VM monitor (overstress, queue depth, stacks, class census); full text in `dumps/scriptreport.txt` |
+| `game.status` | — | heartbeat: `resultInt` = current cell FormID (0 = menu/loading), text = cell/pos/hour |
+| `game.coc` | `arg0` = cell editor id | console `coc` teleport. MUTATES game state (smoke-tour driver; disposable saves) |
 | `region.weather` | `arg0` = region, `arg1` = weather, `argInt` = chance | `resultInt` = entries edited |
 | `texture.convert` | `arg0` = in, `arg1` = out, `argInt` = 0/1/2/3 (RGBA8/BC1/BC3/BC7) | `resultInt` = ok |
 | `texture.foliage` | `arg0` = in, `arg1` = out, `argInt` = fmt \| (threshold << 8), threshold 0 -> 128 | coverage-preserving mips; `resultInt` = ok |

@@ -73,6 +73,11 @@ namespace SB
     //   script.report  (no args) -> resultText = live Papyrus VM monitor
     //                  (overstress, queue depth, stacks, class census);
     //                  full text in dumps/scriptreport.txt
+    //   game.status    (no args) -> resultInt = current cell FormID (0 =
+    //                  menu/loading), resultText = cell/pos/hour heartbeat
+    //   game.coc       arg0 = cell editor id -> console "coc" teleport.
+    //                  MUTATES game state (smoke-tour driver; disposable
+    //                  saves). A bad target logs a console error, no fault.
     //   region.dump    arg0 = "0x<region>"         -> resultText
     //   region.weather arg0 = "0x<region>", arg1 = "0x<weather>", argInt = chance -> resultInt
     //   texture.convert arg0 = in, arg1 = out, argInt = 0|1|2|3 (RGBA8|BC1|BC3|BC7) -> resultInt = ok

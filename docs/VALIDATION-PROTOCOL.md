@@ -272,6 +272,30 @@ a healthy setup; sustained growth or a set overstressed flag while stutter
 is felt is the live confirmation of script lag, and the executing-class
 list names the suspects while it happens.
 
+## 10. Modlist smoke tour (per-op; teleports, disposable save only)
+
+The driver MUTATES game state (it teleports the player); everything it
+reads is read-only. Use a save you will discard.
+
+**Steps:** with the game running (CommandSurface on, unpaused, disposable
+save), pick 4-6 `coc` targets you know work in your modlist (test each in
+the console once), then:
+
+```
+python C:\dev\skyrimbridge\tools\sb_smoke_tour.py --cells Riverwood WhiterunBanneredMare Solitude
+```
+
+**Pass:** every stop lands (cell id changes), the per-stop census and VM
+summaries in `skyrimbridge-tour.txt` look plausible, load times are sane,
+and exit code is 0. Deliberately add a bogus cell name and confirm the stop
+reports FAILED while the tour continues (exit 2). If you have a known-crash
+cell, run it last and confirm the CRASH verdict names it (exit 3).
+
+**The payoff to record:** run the same tour before and after a modlist
+change and diff the two reports. Differences in shadow-light counts, ref
+counts, VM queue depth, and load times per stop are the regression signal
+this tool exists to surface.
+
 ---
 
 ## After a PASS
