@@ -36,19 +36,23 @@ namespace SB
         sinAlt = std::clamp(sinAlt, -1.0f, 1.0f);
         float alt = std::asin(sinAlt);
 
-        float cosAz = (std::sin(decl) - std::sin(lat) * sinAlt) /
-                      (std::cos(lat) * std::cos(alt) + 1e-6f);
-        cosAz = std::clamp(cosAz, -1.0f, 1.0f);
-        float az = std::acos(cosAz);
-        if (std::sin(H) > 0.0f) az = 2.0f * kPi - az;   // afternoon -> western sky
+        // Azimuth from the horizontal components (east, north) via atan2:
+        // exact at the noon pole (the previous acos form needed an epsilon
+        // guard that skewed noon azimuth by ~0.2 deg). Standard solar form.
+        float east  = -std::cos(decl) * std::sin(H);
+        float north =  std::sin(decl) * std::cos(lat) -
+                       std::cos(decl) * std::sin(lat) * std::cos(H);
+        float az = std::atan2(east, north);
+        if (az < 0.0f) az += 2.0f * kPi;
 
+        // (east, north, sinAlt) is already the unit incident vector: the
+        // equatorial -> horizontal transform is a pure rotation.
         SunState s;
         s.altitude = alt;
         s.azimuth = az;
-        float ca = std::cos(alt);
-        s.dirZ = std::sin(alt);
-        s.dirX = ca * std::sin(az);
-        s.dirY = ca * std::cos(az);
+        s.dirX = east;
+        s.dirY = north;
+        s.dirZ = sinAlt;
         return s;
     }
 
@@ -154,8 +158,9 @@ namespace SB
         SKSE::log::info("SkyLighting: loaded Sky.ini (masterEnable={}, {} overrides)",
             m_cfg.masterEnable, m_cfg.overrides.size());
         if (m_cfg.masterEnable && m_cfg.moveSun)
-            SKSE::log::warn("SkyLighting: Orbit.MoveSun set, but orbital sun "
-                "repositioning needs the sky-update hook (pending) — ignored this build");
+            SKSE::log::info("SkyLighting: MoveSun armed (will redirect "
+                "Sky->sun->sunBaseNode along the orbital incident vector each "
+                "frame, preserving the node's own orbit radius)");
     }
 
     // ── Per-frame model ──────────────────────────────────────────────────
@@ -173,6 +178,38 @@ namespace SB
         return std::max(bright(day), bright(day + 4));
     }
 
+    // Reposition the visual sun disc along the computed incident vector.
+    // Gated by [Sky] Enable + [Orbit] MoveSun (both ship OFF). Preserves the
+    // node's current orbit radius (the game's own distance); falls back to
+    // 5000 only if the node sits at the origin. Game-bound: whether the
+    // directional shadow follows the disc, and whether vanilla Sun::Update
+    // rewrites the node later in the frame, is validated in-game
+    // (docs/VALIDATION-PROTOCOL.md).
+    static void MoveSunNode(RE::Sky* sky, const SkyModel::SunState& s)
+    {
+        if (!sky->sun) return;
+        // NiBillboardNode is only forward-declared in this CommonLib install
+        // (no NiBillboardNode.h). It is a NiNode subclass (single-inheritance
+        // scene graph, NiAVObject base at offset 0), so address it as one.
+        auto* node = reinterpret_cast<RE::NiAVObject*>(sky->sun->sunBaseNode.get());
+        if (!node) return;
+
+        float radius = std::sqrt(node->local.translate.SqrLength());
+        if (radius < 1.0f) radius = 5000.0f;
+
+        node->local.translate = { s.dirX * radius, s.dirY * radius, s.dirZ * radius };
+        RE::NiUpdateData upd{};
+        node->Update(upd);
+
+        static bool logged = false;
+        if (!logged) {
+            logged = true;
+            SKSE::log::info("SkyLighting: sun repositioned (alt={:.1f} deg, "
+                "az={:.1f} deg, radius={:.0f})",
+                s.altitude / kDeg, s.azimuth / kDeg, radius);
+        }
+    }
+
     void SkyLighting::Update()
     {
         if (!m_active || !m_cfg.masterEnable) return;
@@ -185,6 +222,9 @@ namespace SB
         float doy  = std::fmod(cal->GetDaysPassed(), 365.0f);
 
         auto sun = SkyModel::ComputeSun(doy, hour, m_cfg.axialTilt, m_cfg.latitude, m_cfg.summerSolstice);
+
+        if (m_cfg.moveSun)
+            MoveSunNode(sky, sun);
 
         if (!m_cfg.ambientEnable) return;
 

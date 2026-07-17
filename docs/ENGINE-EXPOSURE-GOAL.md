@@ -314,9 +314,23 @@ confidence are labeled honestly.
     the same commit as any surface change. **Lane D is COMPLETE.**
 
 **Lane E: close the honest nulls already on record.**
-12. Reverse `AELAS.dll`'s hooks (a plugin DLL, NOT DRM-packed, so static disasm
-    is valid) to finish `SkyLighting`'s sun-repositioning / shadow-direction
-    behavior. Binary is preserved in the protected binaries dir. (moderate RE)
+12. ~~Reverse `AELAS.dll`'s hooks / sun repositioning~~ DONE 2026-07-16 in two
+    parts. The reversal: AELAS is a KiLoader/KiRELibSkyrim plugin (NOT
+    CommonLibSSE), no usable Address Library IDs recoverable; its sun hook
+    emits a Vector3 incident direction from the standard solar formula (spec:
+    `C:\dev\protected\reverse-engineering\kitsuune-plugins-2026-07-16\AELAS-behavioral-spec.md`).
+    The implementation: no blind binding; `SkyLighting::Update()` redirects
+    `Sky->sun->sunBaseNode` (CommonLib's own typed member) along
+    `SkyModel::ComputeSun`'s incident vector, preserving the node's own orbit
+    radius, then refreshes via `NiAVObject::Update`. Gated by `[Sky] Enable` +
+    `[Orbit] MoveSun`, both ship OFF. Azimuth path upgraded to the exact atan2
+    form (the old acos + epsilon guard skewed noon azimuth ~0.2 deg). Math
+    offline-proven: `tests/validate_sky_model.py`, 17 checks (closed-form
+    sunrise/sunset, noon-altitude identity, azimuth quadrants, polar edges).
+    HONEST NULLS (game-bound): the sky-domain radius fallback (5000) if the
+    node sits at origin, whether the directional SHADOW follows the disc (vs
+    only the visual sun), and the timing fight with vanilla `Sun::Update`
+    (may need a post-`Sky::Update` write; that hook is the remaining RE).
 13. In-game-validate and then default-enable `EnbLightInventoryFix` and
     `[Sky] Enable` once the operator confirms the look/behavior. (operator-gated)
 
