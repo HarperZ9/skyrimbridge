@@ -30,7 +30,7 @@ Value kinds: `float`, `int`, `bool`, `color3`, `color4`, `formlink`, `string`.
 Form links resolve through `TESForm::LookupByID` on write; an unresolvable ID
 is a no-op, never a wild pointer.
 
-### Registered schemas (788 fields total)
+### Registered schemas (799 fields total)
 
 | Schema | Form type | Fields | Covers / notable exclusions |
 |---|---|---|---|
@@ -45,6 +45,7 @@ is a no-op, never a wild pointer.
 | EffectShader | EFSH | 95 | fill/edge/particle/color keys/holes/addon + textures + links; membrane and particle blend modes excluded (D3DBLEND is only forward-declared in CommonLib) |
 | ImageSpaceModifier | IMAD | 41 | duration + HDR/cinematic mult-add pairs first-class; fields CommonLib types as raw `uint32` (tint, blurs, DoF) exposed as raw Ints, suffixed `Raw`, never lossy-decoded |
 | WorldSpace | WRLD | 31 | climate/water/lighting/music links, map framing, land/water heights, textures; runtime containers (cell maps) excluded by design |
+| Grass | GRAS | 11 | model path + full DATA block: density, slopes, water distance/state, position/height/color ranges, wave period, flags. Placement (which land textures grow it) lives on TESLandTexture, not GRAS |
 
 Adding a record type is one schema block using the field macros
 (`RF_F`, `RF_INT`, `RF_B`, `RF_FLAGS`, `RF_S`, `RF_LINK`, `RF_C3F`, `RF_C3B`)

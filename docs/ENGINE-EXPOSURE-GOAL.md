@@ -129,9 +129,9 @@ losslessness witness). Built on CommonLib RE:: layouts + the OFFSET-SPEC.
 Nothing re-derived from the DRM'd exe.
 - `Value` (Float / Int / Bool / Color3 / Color4 / FormLink / String), `Field`
   (name + kind + std::function get/set), `Schema` (per FormType), registry.
-- **Eleven schemas registered:** ImageSpace, Volumetric, LightingTemplate,
+- **Twelve schemas registered (799 fields):** ImageSpace, Volumetric, LightingTemplate,
   **Weather (full 487-field record)**, Climate, Region, Light, Water (full
-  DNAM shader block), EffectShader, ImageSpaceModifier, WorldSpace. Adding a
+  DNAM shader block), EffectShader, ImageSpaceModifier, WorldSpace, Grass. Adding a
   record type is one schema block; the macros (RF_F/RF_INT/RF_B/RF_FLAGS/RF_S/
   RF_LINK/RF_C3F/RF_C3B) and the Weather-style programmatic builder handle
   scalars, links, strings, and indexed arrays. Honest exclusions are named in
@@ -376,7 +376,15 @@ order agreed with the operator:
     addon (v1.1.0). Offline-proven: tests/validate_tree_wind.py, 22/22.
     Game-bound (protocol section 7): does the pushed tree sway, and does a
     STAT-placed reference animate at all vs needing a TREE form.
-17. TESGrass/GRAS schema in EngineReflect (one block). (open)
+17. ~~TESGrass/GRAS schema~~ DONE 2026-07-16 late: twelfth schema, 11 fields
+    (model path + the full typed DATA block: density, min/max slope, water
+    distance/state, position/height/color ranges, wave period, flags), so
+    grass tuning rides the existing dump/apply/verify loop and the command
+    channel. Compile-verified against CommonLib's TESGrass layout, like every
+    schema; in-game dump/apply/verify is operator-validated. Total 799
+    fields. Honest scope note in-schema: placement (which landscape textures
+    grow a grass) lives on TESLandTexture, a future one-block add; grass
+    LOD/cache stays NGIO/DynDOLOD territory.
 18. Convex-hull collision investigation (bhkConvexVerticesShape, MOPP-free;
     confidence moderate until checked against real NIFs). (open, scoped
     investigation before any code)

@@ -641,6 +641,25 @@ namespace SB::Reflect
             RF_S(TESWorldSpace, "WaterEnvMap", waterEnvMap.textureName),
         }});
 
+        // Grass (GRAS): the full typed DATA block plus the model path. The
+        // engine clamps some of these itself (density/slopes 0..100/90); the
+        // schema exposes the raw stored values, and the engine's own setters
+        // stay the authority on live behavior. Grass placement (which
+        // landscape textures grow it) lives on TESLandTexture, not here.
+        R.push_back(Schema{ "Grass", RE::TESGrass::FORMTYPE, {
+            RF_S(TESGrass, "Model", model),
+            RF_INT(TESGrass, "Density", data.density, std::int8_t),
+            RF_INT(TESGrass, "MinSlope", data.minSlopeDegrees, std::int8_t),
+            RF_INT(TESGrass, "MaxSlope", data.maxSlopeDegrees, std::int8_t),
+            RF_INT(TESGrass, "DistanceFromWater", data.distanceFromWaterLevel, std::uint16_t),
+            RF_FLAGS(TESGrass, "UnderwaterState", data.underwater, RE::TESGrass::GRASS_WATER_STATE),
+            RF_F(TESGrass, "PositionRange", data.positionRange),
+            RF_F(TESGrass, "HeightRange", data.heightRange),
+            RF_F(TESGrass, "ColorRange", data.colorRange),
+            RF_F(TESGrass, "WavePeriod", data.wavePeriod),
+            RF_FLAGS(TESGrass, "Flags", data.flags, RE::TESGrass::GRASS_DATA::Flag),
+        }});
+
         SKSE::log::info("EngineReflect: {} schemas registered", R.size());
     }
 
