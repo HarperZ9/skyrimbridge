@@ -267,15 +267,33 @@ namespace SB::PapyrusBridge
         return lines;
     }
 
-    // ── Texture codec native (non-.dds asset integration) ────────────────
+    // ── Texture codec natives (non-.dds asset integration) ───────────────
     // cgf "SkyrimBridge.ConvertTexture" "in.png" "out.dds"  (paths game-relative
-    // or absolute). Decodes PNG/TGA/BMP and writes a mipmapped uncompressed
-    // DDS the engine accepts.
+    // or absolute). Decodes PNG/TGA/BMP/DDS (incl. DXT1/DXT5) and writes by
+    // output extension: .dds = mipmapped uncompressed RGBA8, .tga = 32-bit TGA
+    // (the DDS -> editable lane).
+    // cgf "SkyrimBridge.ConvertTextureFmt" "in.png" "out.dds" "BC3"  writes
+    // block-compressed DDS ("BC1" opaque / "BC3" with alpha / "RGBA8").
 
     static bool ConvertTexture(RE::StaticFunctionTag*, RE::BSFixedString a_in, RE::BSFixedString a_out)
     {
-        bool ok = TexCodec::ConvertToDDS(a_in.c_str(), a_out.c_str());
+        bool ok = TexCodec::Convert(a_in.c_str(), a_out.c_str());
         SKSE::log::info("TextureCodec: {} -> {} : {}", a_in.c_str(), a_out.c_str(), ok ? "ok" : "failed");
+        return ok;
+    }
+
+    static bool ConvertTextureFmt(RE::StaticFunctionTag*, RE::BSFixedString a_in,
+                                  RE::BSFixedString a_out, RE::BSFixedString a_fmt)
+    {
+        auto fmt = TexCodec::DDSFormat::RGBA8;
+        if (_stricmp(a_fmt.c_str(), "BC1") == 0)      fmt = TexCodec::DDSFormat::BC1;
+        else if (_stricmp(a_fmt.c_str(), "BC3") == 0) fmt = TexCodec::DDSFormat::BC3;
+        else if (_stricmp(a_fmt.c_str(), "RGBA8") != 0) {
+            SKSE::log::warn("TextureCodec: unknown format '{}' (BC1/BC3/RGBA8)", a_fmt.c_str());
+            return false;
+        }
+        bool ok = TexCodec::Convert(a_in.c_str(), a_out.c_str(), fmt);
+        SKSE::log::info("TextureCodec: {} -> {} [{}] : {}", a_in.c_str(), a_out.c_str(), a_fmt.c_str(), ok ? "ok" : "failed");
         return ok;
     }
 
@@ -318,8 +336,9 @@ namespace SB::PapyrusBridge
         vm->RegisterFunction("EngineReflectList",         "SkyrimBridge", EngineReflectList);
 
         vm->RegisterFunction("ConvertTexture",      "SkyrimBridge", ConvertTexture);
+        vm->RegisterFunction("ConvertTextureFmt",   "SkyrimBridge", ConvertTextureFmt);
 
-        SKSE::log::info("PapyrusBridge: registered 25 native functions under 'SkyrimBridge'");
+        SKSE::log::info("PapyrusBridge: registered 26 native functions under 'SkyrimBridge'");
         return true;
     }
 }

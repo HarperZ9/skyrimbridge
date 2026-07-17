@@ -86,7 +86,7 @@ almost never necessary because CommonLib covers it.
 
 ## 3. What is built, compiled, and installed (the current state)
 
-Repo: `C:\dev\skyrimbridge\` (50+ core sources, 25 Papyrus natives). Build with
+Repo: `C:\dev\skyrimbridge\` (50+ core sources, 26 Papyrus natives). Build with
 VS18 + CommonLibSSE-NG 3.7.0 (static x64 triplet). Installed DLL target:
 `E:\Modlists\SkyGroundChronicles\mods\SkyrimBridge\SKSE\Plugins\SkyrimBridge.dll`.
 
@@ -149,16 +149,26 @@ Nothing re-derived from the DRM'd exe.
 - Decode: **PNG** (from-scratch DEFLATE/zlib inflate with verified Adler-32 +
   per-chunk CRC-32; all five color types; 1/2/4/8/16-bit, 16-bit narrows via
   high byte; all five filters; Adam7 interlace; tRNS palette alpha + colorkey),
-  TGA (uncompressed + RLE), BMP (24/32-bit).
-- Encode: uncompressed R8G8B8A8 DDS with an optional clamp-edge box-filter
-  mipmap chain down to 1x1 (`ConvertToDDS` emits mipmapped by default; the
-  single-mip byte layout is unchanged when mips are off).
-- Papyrus native `ConvertTexture(in,out)`.
-- VALIDATED offline (77-check harness): inflate byte-exact vs zlib on the real
-  IDAT streams (incl. a 33.7 MB stream), PNG pixel-exact vs PIL on 40 real ENB
-  PNGs + synthetic modes + hand-built Adam7/16-bit cases, BMP/TGA vs PIL, DDS
-  mip structure + filter math.
-HONEST NULLS: BCn block compression on write and the runtime texture-load
+  TGA (uncompressed + RLE), BMP (24/32-bit), **DDS** (uncompressed 32-bit
+  masked, DXT1/BC1, DXT5/BC3; top mip).
+- Encode: DDS as uncompressed RGBA8 **or BC1/BC3 block-compressed** (baseline
+  encoder tier, stated in-source: most-distant-pair endpoints, nearest index),
+  optional clamp-edge box-filter mipmap chain down to 1x1; 32-bit TGA write
+  (the DDS -> editable-format lane).
+- Papyrus natives `ConvertTexture(in,out)` (dispatches on output extension)
+  and `ConvertTextureFmt(in,out,"BC1"|"BC3"|"RGBA8")`.
+- VALIDATED offline (102 checks, `tests/validate_png_codec.py` +
+  `tests/validate_bcn_codec.py`, both in-repo and re-runnable): inflate
+  byte-exact vs zlib on the real IDAT streams (incl. a 33.7 MB stream); PNG
+  pixel-exact vs PIL on 40 real ENB PNGs + synthetic modes + hand-built
+  Adam7/16-bit cases; BC decode exact vs PIL on hand-built blocks (every mode,
+  incl. DXT5's always-4-color rule) and 8 real modlist DXT1/DXT5 textures; BC
+  encode PIL-agreed with 39-41 dB PSNR on real content and lossless on
+  exactly-representable blocks; DDS structure + mip math; TGA write via PIL
+  read-back. The BC interpolation arithmetic was locked empirically against
+  PIL first (truncating /3, /2, /7, /5).
+HONEST NULLS: BC7, DX10-header DDS, cubemaps/volumes, DDS mip-chain read
+beyond the top level, PNG/BMP write, and the runtime texture-load
 substitution hook are NOT done.
 
 ### 3d. Config architecture (ours, not theirs)
@@ -232,9 +242,9 @@ confidence are labeled honestly.
    byte-exact vs zlib on their IDAT streams (77-check harness).
 6. ~~**Mipmap generation**~~ DONE 2026-07-16: clamp-edge box filter to 1x1,
    default-on in `ConvertToDDS`, single-mip layout preserved otherwise.
-7. **BCn block compression** on write (BC1/BC3/BC7). Start BC1/BC3 (tractable);
-   BC7 is genuinely hard to do well. Optional: emit DX10-header DDS. (BC1/3
-   moderate, BC7 hard)
+7. ~~**BC1/BC3 block compression**~~ DONE 2026-07-16 (encode + decode, PIL-exact
+   decode model, baseline encoder tier; DDS read + TGA write landed with it).
+   OPEN remainder: BC7 (genuinely hard to do well) and DX10-header DDS.
 8. **The runtime texture-substitution hook (the payoff).** Hook the game's
    texture-load path so a dropped `.png`/`.tga`/`.bmp` is decoded by TextureCodec
    and served where the engine expects `.dds`, transparently. SkyrimBridge

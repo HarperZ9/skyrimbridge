@@ -373,12 +373,80 @@ namespace SB::TexCodec
         return img;
     }
 
+    // Block-codec helpers defined with the BC section below.
+    namespace
+    {
+        void DecodeBlockBC1(const std::uint8_t* in, bool separateAlpha, std::uint8_t px[16][4]);
+        void DecodeBlockAlpha(const std::uint8_t* in, std::uint8_t alpha[16]);
+    }
+
+    // DDS -> RGBA (top mip): uncompressed 32-bit masked formats and DXT1/DXT5.
+    Image DecodeDDSImage(const std::uint8_t* d, std::size_t len)
+    {
+        Image img;
+        if (len < 128 || d[0] != 'D' || d[1] != 'D' || d[2] != 'S' || d[3] != ' ') return img;
+        if (rd32(d + 4) != 124) return img;
+        const std::uint32_t H = rd32(d + 12), W = rd32(d + 16);
+        if (!W || !H || static_cast<std::uint64_t>(W) * H > (1ull << 26)) return img;
+        const std::uint32_t pfFlags = rd32(d + 80), fourCC = rd32(d + 84);
+        const std::uint8_t* data = d + 128;
+        const std::size_t   avail = len - 128;
+
+        if (pfFlags & 0x4) {                                       // FOURCC path
+            const bool dxt1 = fourCC == 0x31545844;                // "DXT1"
+            const bool dxt5 = fourCC == 0x35545844;                // "DXT5"
+            if (!dxt1 && !dxt5) return img;                        // BC7/DX10/...: honest null
+            const std::uint32_t bw = (W + 3) / 4, bh = (H + 3) / 4;
+            const std::size_t blockBytes = dxt5 ? 16 : 8;
+            if (static_cast<std::size_t>(bw) * bh * blockBytes > avail) return img;
+            img.rgba.resize(static_cast<std::size_t>(W) * H * 4);
+            std::uint8_t px[16][4]; std::uint8_t alpha[16];
+            for (std::uint32_t by = 0; by < bh; ++by)
+                for (std::uint32_t bx = 0; bx < bw; ++bx) {
+                    const std::uint8_t* b = data + (static_cast<std::size_t>(by) * bw + bx) * blockBytes;
+                    if (dxt5) { DecodeBlockAlpha(b, alpha); DecodeBlockBC1(b + 8, true, px); }
+                    else      { DecodeBlockBC1(b, false, px); }
+                    for (int r = 0; r < 4; ++r)
+                        for (int c = 0; c < 4; ++c) {
+                            std::uint32_t x = bx * 4 + c, y = by * 4 + r;
+                            if (x >= W || y >= H) continue;
+                            std::uint8_t* o = img.rgba.data() + (static_cast<std::size_t>(y) * W + x) * 4;
+                            o[0] = px[r*4+c][0]; o[1] = px[r*4+c][1]; o[2] = px[r*4+c][2];
+                            o[3] = dxt5 ? alpha[r*4+c] : px[r*4+c][3];
+                        }
+                }
+        } else if (pfFlags & 0x40) {                               // uncompressed RGB(A)
+            if (rd32(d + 88) != 32) return img;                    // 32bpp only
+            const std::uint32_t mr = rd32(d + 92), mg = rd32(d + 96), mb = rd32(d + 100), ma = rd32(d + 104);
+            auto shiftOf = [](std::uint32_t mask) -> int {
+                for (int s = 0; s < 32; s += 8) if (mask == (0xFFu << s)) return s;
+                return -1;
+            };
+            const int sr = shiftOf(mr), sg = shiftOf(mg), sb = shiftOf(mb);
+            const int sa = ma ? shiftOf(ma) : -2;                  // -2 = no alpha channel
+            if (sr < 0 || sg < 0 || sb < 0 || sa == -1) return img;   // non-byte-aligned masks: honest null
+            if (static_cast<std::size_t>(W) * H * 4 > avail) return img;
+            img.rgba.resize(static_cast<std::size_t>(W) * H * 4);
+            for (std::size_t i = 0; i < static_cast<std::size_t>(W) * H; ++i) {
+                std::uint32_t v = rd32(data + i * 4);
+                img.rgba[i*4+0] = static_cast<std::uint8_t>(v >> sr);
+                img.rgba[i*4+1] = static_cast<std::uint8_t>(v >> sg);
+                img.rgba[i*4+2] = static_cast<std::uint8_t>(v >> sb);
+                img.rgba[i*4+3] = sa >= 0 ? static_cast<std::uint8_t>(v >> sa) : 255;
+            }
+        } else {
+            return img;
+        }
+        img.width = W; img.height = H; img.valid = true;
+        return img;
+    }
+
     Image Decode(const std::uint8_t* d, std::size_t len)
     {
         switch (DetectFormat(d, len)) {
         case Format::BMP: return DecodeBMP(d, len);
         case Format::PNG: return DecodePNG(d, len);
-        case Format::DDS: return {};   // already engine-native
+        case Format::DDS: return DecodeDDSImage(d, len);
         default:          return DecodeTGA(d, len);   // headerless fallback
         }
     }
@@ -392,6 +460,171 @@ namespace SB::TexCodec
         if (DetectFromPath(path.string()) == Format::TGA)
             return DecodeTGA(buf.data(), buf.size());
         return Decode(buf.data(), buf.size());
+    }
+
+    // ── BC1 / BC3 block codec ────────────────────────────────────────────
+    // Interpolation arithmetic matches the D3D reference decoders (verified
+    // empirically against Pillow's native BCn decoder): truncating (2a+b)/3
+    // and (a+b)/2 for color, truncating /7 and /5 ramps for BC3 alpha, and
+    // DXT5 color blocks are ALWAYS 4-color regardless of endpoint order.
+    namespace
+    {
+        std::uint16_t To565(const std::uint8_t* c)
+        {
+            return static_cast<std::uint16_t>(((c[0] >> 3) << 11) | ((c[1] >> 2) << 5) | (c[2] >> 3));
+        }
+
+        void From565(std::uint16_t v, int* out)   // bit-replicated expansion
+        {
+            int r = (v >> 11) & 0x1F, g = (v >> 5) & 0x3F, b = v & 0x1F;
+            out[0] = (r << 3) | (r >> 2);
+            out[1] = (g << 2) | (g >> 4);
+            out[2] = (b << 3) | (b >> 2);
+        }
+
+        // 4x4 block of RGBA source pixels, edge-clamped.
+        void FetchBlock(const Image& img, std::uint32_t bx, std::uint32_t by, std::uint8_t px[16][4])
+        {
+            for (int r = 0; r < 4; ++r)
+                for (int c = 0; c < 4; ++c) {
+                    std::uint32_t x = bx * 4 + c; if (x >= img.width)  x = img.width - 1;
+                    std::uint32_t y = by * 4 + r; if (y >= img.height) y = img.height - 1;
+                    const std::uint8_t* s = img.rgba.data() + (static_cast<std::size_t>(y) * img.width + x) * 4;
+                    px[r * 4 + c][0] = s[0]; px[r * 4 + c][1] = s[1];
+                    px[r * 4 + c][2] = s[2]; px[r * 4 + c][3] = s[3];
+                }
+        }
+
+        // Color palette a decoder will reconstruct from two 565 endpoints.
+        void BCPalette(std::uint16_t c0, std::uint16_t c1, bool fourColor, int p[4][4])
+        {
+            From565(c0, p[0]); From565(c1, p[1]);
+            p[0][3] = p[1][3] = p[2][3] = p[3][3] = 255;
+            if (fourColor) {
+                for (int k = 0; k < 3; ++k) {
+                    p[2][k] = (2 * p[0][k] + p[1][k]) / 3;
+                    p[3][k] = (p[0][k] + 2 * p[1][k]) / 3;
+                }
+            } else {
+                for (int k = 0; k < 3; ++k) {
+                    p[2][k] = (p[0][k] + p[1][k]) / 2;
+                    p[3][k] = 0;
+                }
+                p[3][3] = 0;                     // transparent black
+            }
+        }
+
+        // Baseline endpoint pick: the two most distant colors in the block.
+        void PickEndpoints(const std::uint8_t px[16][4], std::uint16_t& c0, std::uint16_t& c1)
+        {
+            int bi = 0, bj = 0; long best = -1;
+            for (int i = 0; i < 16; ++i)
+                for (int j = i + 1; j < 16; ++j) {
+                    long d = 0;
+                    for (int k = 0; k < 3; ++k) { long e = px[i][k] - px[j][k]; d += e * e; }
+                    if (d > best) { best = d; bi = i; bj = j; }
+                }
+            c0 = To565(px[bi]); c1 = To565(px[bj]);
+            if (c0 < c1) { std::uint16_t t = c0; c0 = c1; c1 = t; }
+        }
+
+        void EncodeBlockBC1(const std::uint8_t px[16][4], std::uint8_t* out)
+        {
+            std::uint16_t c0, c1;
+            PickEndpoints(px, c0, c1);
+            int p[4][4];
+            BCPalette(c0, c1, true, p);
+            std::uint32_t idx = 0;
+            const int n = (c0 == c1) ? 1 : 4;    // degenerate: only index 0 is safe
+            for (int i = 0; i < 16; ++i) {
+                int bk = 0; long bd = 1L << 30;
+                for (int k = 0; k < n; ++k) {
+                    long d = 0;
+                    for (int c = 0; c < 3; ++c) { long e = px[i][c] - p[k][c]; d += e * e; }
+                    if (d < bd) { bd = d; bk = k; }
+                }
+                idx |= static_cast<std::uint32_t>(bk) << (2 * i);
+            }
+            out[0] = c0 & 0xFF; out[1] = c0 >> 8;
+            out[2] = c1 & 0xFF; out[3] = c1 >> 8;
+            out[4] = idx & 0xFF; out[5] = (idx >> 8) & 0xFF;
+            out[6] = (idx >> 16) & 0xFF; out[7] = (idx >> 24) & 0xFF;
+        }
+
+        void EncodeBlockAlpha(const std::uint8_t px[16][4], std::uint8_t* out)
+        {
+            std::uint8_t a0 = 0, a1 = 255;
+            for (int i = 0; i < 16; ++i) {
+                if (px[i][3] > a0) a0 = px[i][3];
+                if (px[i][3] < a1) a1 = px[i][3];
+            }
+            int ramp[8];
+            int count;
+            if (a0 > a1) {                       // 8-value mode
+                ramp[0] = a0; ramp[1] = a1;
+                for (int i = 1; i <= 6; ++i) ramp[1 + i] = ((7 - i) * a0 + i * a1) / 7;
+                count = 8;
+            } else {                             // flat block: index 0 = a0
+                ramp[0] = a0; count = 1;
+            }
+            std::uint64_t bits = 0;
+            for (int i = 0; i < 16; ++i) {
+                int bk = 0, bd = 1 << 30;
+                for (int k = 0; k < count; ++k) {
+                    int d = px[i][3] - ramp[k]; if (d < 0) d = -d;
+                    if (d < bd) { bd = d; bk = k; }
+                }
+                bits |= static_cast<std::uint64_t>(bk) << (3 * i);
+            }
+            out[0] = a0; out[1] = a1;
+            for (int i = 0; i < 6; ++i) out[2 + i] = static_cast<std::uint8_t>((bits >> (8 * i)) & 0xFF);
+        }
+
+        std::vector<std::uint8_t> CompressBC(const Image& img, bool bc3)
+        {
+            std::uint32_t bw = (img.width + 3) / 4, bh = (img.height + 3) / 4;
+            std::vector<std::uint8_t> out(static_cast<std::size_t>(bw) * bh * (bc3 ? 16 : 8));
+            std::uint8_t px[16][4];
+            std::size_t o = 0;
+            for (std::uint32_t by = 0; by < bh; ++by)
+                for (std::uint32_t bx = 0; bx < bw; ++bx) {
+                    FetchBlock(img, bx, by, px);
+                    if (bc3) { EncodeBlockAlpha(px, out.data() + o); o += 8; }
+                    EncodeBlockBC1(px, out.data() + o); o += 8;
+                }
+            return out;
+        }
+
+        void DecodeBlockBC1(const std::uint8_t* in, bool separateAlpha, std::uint8_t px[16][4])
+        {
+            std::uint16_t c0 = static_cast<std::uint16_t>(in[0] | (in[1] << 8));
+            std::uint16_t c1 = static_cast<std::uint16_t>(in[2] | (in[3] << 8));
+            std::uint32_t idx = static_cast<std::uint32_t>(in[4]) | (static_cast<std::uint32_t>(in[5]) << 8) |
+                                (static_cast<std::uint32_t>(in[6]) << 16) | (static_cast<std::uint32_t>(in[7]) << 24);
+            int p[4][4];
+            BCPalette(c0, c1, separateAlpha || c0 > c1, p);
+            for (int i = 0; i < 16; ++i) {
+                int k = (idx >> (2 * i)) & 3;
+                px[i][0] = static_cast<std::uint8_t>(p[k][0]); px[i][1] = static_cast<std::uint8_t>(p[k][1]);
+                px[i][2] = static_cast<std::uint8_t>(p[k][2]); px[i][3] = static_cast<std::uint8_t>(p[k][3]);
+            }
+        }
+
+        void DecodeBlockAlpha(const std::uint8_t* in, std::uint8_t alpha[16])
+        {
+            int a0 = in[0], a1 = in[1];
+            int ramp[8] = { a0, a1 };
+            if (a0 > a1)
+                for (int i = 1; i <= 6; ++i) ramp[1 + i] = ((7 - i) * a0 + i * a1) / 7;
+            else {
+                for (int i = 1; i <= 4; ++i) ramp[1 + i] = ((5 - i) * a0 + i * a1) / 5;
+                ramp[6] = 0; ramp[7] = 255;
+            }
+            std::uint64_t bits = 0;
+            for (int i = 0; i < 6; ++i) bits |= static_cast<std::uint64_t>(in[2 + i]) << (8 * i);
+            for (int i = 0; i < 16; ++i)
+                alpha[i] = static_cast<std::uint8_t>(ramp[(bits >> (3 * i)) & 7]);
+        }
     }
 
     // ── DDS ──────────────────────────────────────────────────────────────
@@ -443,7 +676,7 @@ namespace SB::TexCodec
         return m;
     }
 
-    std::vector<std::uint8_t> EncodeDDS_RGBA(const Image& img, bool mipmaps)
+    std::vector<std::uint8_t> EncodeDDS(const Image& img, DDSFormat fmt, bool mipmaps)
     {
         std::vector<std::uint8_t> out;
         if (!img.valid || img.rgba.size() != static_cast<std::size_t>(img.width) * img.height * 4) return out;
@@ -453,47 +686,89 @@ namespace SB::TexCodec
             for (std::uint32_t w = img.width, h = img.height; w > 1 || h > 1;
                  w = w > 1 ? w / 2 : 1, h = h > 1 ? h / 2 : 1) ++levels;
 
-        out.reserve(128 + img.rgba.size() * (mipmaps ? 4 : 3) / 3);
+        const bool bc = fmt != DDSFormat::RGBA8;
+        const bool bc3 = fmt == DDSFormat::BC3;
+        const std::uint32_t blockBytes = bc3 ? 16 : 8;
+
+        out.reserve(128 + img.rgba.size() * (mipmaps ? 4 : 3) / 3 / (bc ? 4 : 1));
         out.push_back('D'); out.push_back('D'); out.push_back('S'); out.push_back(' ');
         wr32(out, 124);                                  // dwSize
-        std::uint32_t flags = 0x1 | 0x2 | 0x4 | 0x1000 | 0x8;   // CAPS|HEIGHT|WIDTH|PIXELFORMAT|PITCH
+        std::uint32_t flags = 0x1 | 0x2 | 0x4 | 0x1000;  // CAPS|HEIGHT|WIDTH|PIXELFORMAT
+        flags |= bc ? 0x80000 : 0x8;                     // LINEARSIZE : PITCH
         if (mipmaps) flags |= 0x20000;                   // DDSD_MIPMAPCOUNT
         wr32(out, flags);
         wr32(out, img.height);
         wr32(out, img.width);
-        wr32(out, img.width * 4);                        // pitch
+        wr32(out, bc ? ((img.width + 3) / 4) * ((img.height + 3) / 4) * blockBytes
+                     : img.width * 4);                   // linear size / pitch
         wr32(out, 0);                                    // depth
         wr32(out, mipmaps ? levels : 0);                 // mipMapCount
         for (int i = 0; i < 11; ++i) wr32(out, 0);       // reserved1
         wr32(out, 32);                                   // pixelformat size
-        wr32(out, 0x1 | 0x40);                           // DDPF_ALPHAPIXELS|DDPF_RGB
-        wr32(out, 0);                                    // fourCC
-        wr32(out, 32);                                   // RGBBitCount
-        wr32(out, 0x000000FF);                           // R mask (RGBA byte order)
-        wr32(out, 0x0000FF00);                           // G mask
-        wr32(out, 0x00FF0000);                           // B mask
-        wr32(out, 0xFF000000);                           // A mask
+        if (bc) {
+            wr32(out, 0x4);                              // DDPF_FOURCC
+            wr32(out, bc3 ? 0x35545844u : 0x31545844u);  // "DXT5" / "DXT1"
+            wr32(out, 0); wr32(out, 0); wr32(out, 0); wr32(out, 0); wr32(out, 0);
+        } else {
+            wr32(out, 0x1 | 0x40);                       // DDPF_ALPHAPIXELS|DDPF_RGB
+            wr32(out, 0);                                // fourCC
+            wr32(out, 32);                               // RGBBitCount
+            wr32(out, 0x000000FF);                       // R mask (RGBA byte order)
+            wr32(out, 0x0000FF00);                       // G mask
+            wr32(out, 0x00FF0000);                       // B mask
+            wr32(out, 0xFF000000);                       // A mask
+        }
         std::uint32_t caps = 0x1000;                     // DDSCAPS_TEXTURE
         if (mipmaps) caps |= 0x8 | 0x400000;             // COMPLEX | MIPMAP
         wr32(out, caps);
         wr32(out, 0); wr32(out, 0); wr32(out, 0);        // caps2..4
         wr32(out, 0);                                    // reserved2
 
-        out.insert(out.end(), img.rgba.begin(), img.rgba.end());
-        if (mipmaps) {
-            Image level = img;
-            for (std::uint32_t i = 1; i < levels; ++i) {
-                level = HalveBox(level);
+        Image level = img;
+        for (std::uint32_t i = 0; ; ++i) {
+            if (bc) {
+                auto blocks = CompressBC(level, bc3);
+                out.insert(out.end(), blocks.begin(), blocks.end());
+            } else {
                 out.insert(out.end(), level.rgba.begin(), level.rgba.end());
             }
+            if (i + 1 >= levels) break;
+            level = HalveBox(level);
         }
         return out;
     }
 
-    bool WriteDDS(const std::filesystem::path& out, const Image& img, bool mipmaps)
+    std::vector<std::uint8_t> EncodeDDS_RGBA(const Image& img, bool mipmaps)
     {
-        auto bytes = EncodeDDS_RGBA(img, mipmaps);
+        return EncodeDDS(img, DDSFormat::RGBA8, mipmaps);
+    }
+
+    bool WriteDDS(const std::filesystem::path& out, const Image& img, bool mipmaps, DDSFormat fmt)
+    {
+        auto bytes = EncodeDDS(img, fmt, mipmaps);
         if (bytes.empty()) return false;
+        std::ofstream f(out, std::ios::binary | std::ios::trunc);
+        if (!f) return false;
+        f.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+        return static_cast<bool>(f);
+    }
+
+    bool WriteTGA(const std::filesystem::path& out, const Image& img)
+    {
+        if (!img.valid || img.width > 0xFFFF || img.height > 0xFFFF) return false;
+        std::vector<std::uint8_t> bytes;
+        bytes.reserve(18 + img.rgba.size());
+        std::uint8_t hdr[18] = {};
+        hdr[2] = 2;                                       // uncompressed truecolor
+        hdr[12] = img.width & 0xFF;  hdr[13] = (img.width >> 8) & 0xFF;
+        hdr[14] = img.height & 0xFF; hdr[15] = (img.height >> 8) & 0xFF;
+        hdr[16] = 32;
+        hdr[17] = 0x28;                                   // top-origin, 8 alpha bits
+        bytes.insert(bytes.end(), hdr, hdr + 18);
+        for (std::size_t i = 0; i < img.rgba.size(); i += 4) {   // RGBA -> BGRA
+            bytes.push_back(img.rgba[i + 2]); bytes.push_back(img.rgba[i + 1]);
+            bytes.push_back(img.rgba[i + 0]); bytes.push_back(img.rgba[i + 3]);
+        }
         std::ofstream f(out, std::ios::binary | std::ios::trunc);
         if (!f) return false;
         f.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
@@ -502,8 +777,17 @@ namespace SB::TexCodec
 
     bool ConvertToDDS(const std::filesystem::path& in, const std::filesystem::path& out)
     {
+        return Convert(in, out, DDSFormat::RGBA8, true);
+    }
+
+    bool Convert(const std::filesystem::path& in, const std::filesystem::path& out,
+                 DDSFormat fmt, bool mipmaps)
+    {
         Image img = DecodeFile(in);
         if (!img.valid) return false;
-        return WriteDDS(out, img, true);
+        Format target = DetectFromPath(out.string());
+        if (target == Format::TGA) return WriteTGA(out, img);
+        if (target == Format::DDS) return WriteDDS(out, img, mipmaps, fmt);
+        return false;                                     // PNG/BMP write: honest null
     }
 }
