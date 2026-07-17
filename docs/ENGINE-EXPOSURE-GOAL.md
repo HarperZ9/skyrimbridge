@@ -297,14 +297,21 @@ confidence are labeled honestly.
    primitive/group only); collision (bhk*) generation; Draco/sparse glTF.
 
 **Lane D: expose it as a real utility surface.**
-10. Broaden the surface beyond Papyrus: the existing shared-memory channel
-    (`SharedMemoryBridge`) for external tools, and optionally a small local IPC
-    endpoint, so EngineReflect + TextureCodec are usable by an external editor,
-    not only console. (moderate)
+10. ~~Broaden the surface beyond Papyrus~~ DONE 2026-07-16: external command
+    channel. A second shared-memory region (`SkyrimBridge_Command`, layout in
+    `src/SB_CommandLayout.h`, plugin side `src/core/BridgeCommand.{h,cpp}`,
+    header-only client `tools/SkyrimBridgeClient.h`) drives EngineReflect,
+    RegionWalker, TextureCodec, and ModelCodec from an external tool. Ten
+    verbs, single-slot sequence-gated protocol, one request per frame,
+    SEH-isolated dispatch. `[Native] CommandSurface`, ships OFF. Offline-proven
+    (`tests/validate_command_protocol.py`, 15 checks: ctypes ABI mirror +
+    200-round sequence-gated round-trip). Game-bound: live dispatch through a
+    running client (validation protocol has the steps).
 11. ~~Documentation spec sheet~~ DONE 2026-07-16: `docs/SPEC-ENGINE-EXPOSURE.md`
     (schemas table with verified field counts, region walker, texture format
-    matrix, all 29 natives with signatures + console forms, config grammar,
-    validation receipts). Keep it in the same commit as any surface change.
+    matrix, model codec, all 31 natives with signatures + console forms, config
+    grammar, the command channel + verb table, validation receipts). Keep it in
+    the same commit as any surface change. **Lane D is COMPLETE.**
 
 **Lane E: close the honest nulls already on record.**
 12. Reverse `AELAS.dll`'s hooks (a plugin DLL, NOT DRM-packed, so static disasm

@@ -39,6 +39,7 @@
 #include "EngineFixes.h"
 #include "TextureAutoConvert.h"
 #include "TextureLoadHook.h"
+#include "BridgeCommand.h"
 
 // GPU tier
 #include "D3D11Hook.h"
@@ -127,6 +128,7 @@ struct NativeConfig
     bool engineFixes = true;    // recovered AE spin-lock patch; validated before write
     bool textureAutoConvert = false;   // startup foreign-texture transcode (opt-in)
     bool textureLoadHook = false;      // in-flight foreign-texture substitution (opt-in)
+    bool commandSurface = false;       // external command channel (opt-in)
 };
 static NativeConfig s_native;
 
@@ -142,6 +144,7 @@ static void LoadNativeConfig(const std::filesystem::path& configDir)
         s_native.engineFixes          = s->Bool("EngineFixes", s_native.engineFixes);
         s_native.textureAutoConvert   = s->Bool("TextureAutoConvert", s_native.textureAutoConvert);
         s_native.textureLoadHook      = s->Bool("TextureLoadHook", s_native.textureLoadHook);
+        s_native.commandSurface       = s->Bool("CommandSurface", s_native.commandSurface);
     }
 }
 
@@ -330,6 +333,10 @@ static void DoFrameUpdate()
         SKSE::log::error("SkyrimBridge: SharedMemoryBridge::WriteFrame threw");
     }
 
+    // 3b. External command channel: dispatch one pending request per frame.
+    if (SB::BridgeCommand::Get().IsActive())
+        SB::BridgeCommand::Get().Poll();
+
     // 4. Phase 4: enbParmLink-compatible expression evaluation
     try {
         SB::ParmLinkCompat::Get().Update(dt);
@@ -421,6 +428,7 @@ static void __stdcall OnENBCallback(int a_callbackType)
     case ENBInterface::CallbackType::OnExit:
         SB::ParmLinkCompat::Get().Shutdown();
         SB::SharedMemoryBridge::Get().Shutdown();
+        SB::BridgeCommand::Get().Shutdown();
         SB::WeatherParameterComputer::Get().Shutdown();
         SKSE::log::info("SkyrimBridge: shut down on ENB exit");
         break;
@@ -475,6 +483,9 @@ static void OnMessage(SKSE::MessagingInterface::Message* a_msg)
 
         if (SB::SharedMemoryBridge::Get().Initialize())
             SKSE::log::info("SkyrimBridge: shared-memory channel active");
+
+        if (s_native.commandSurface && SB::BridgeCommand::Get().Initialize())
+            SKSE::log::info("SkyrimBridge: external command channel active");
 
         auto configDir = std::filesystem::path("Data/SKSE/Plugins/SkyrimBridge");
         SB::WeatherParameterComputer::Get().Initialize(configDir);

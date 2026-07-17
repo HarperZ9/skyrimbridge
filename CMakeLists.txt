@@ -53,6 +53,7 @@ add_commonlibsse_plugin(
         src/core/TextureAutoConvert.cpp
         src/core/TextureLoadHook.cpp
         src/core/ModelCodec.cpp
+        src/core/BridgeCommand.cpp
 
         # Core trackers (domains 1-10)
         src/core/CelestialTracker.cpp

@@ -160,7 +160,28 @@ the real files in the modlist.
 
 ---
 
-## 4. Native API reference (30 natives, script name `SkyrimBridge`)
+## 4. ModelCodec: foreign-model pipeline (OBJ / glTF -> NIF)
+
+`src/core/ModelCodec.{h,cpp}`. Parses OBJ and glTF/GLB (zero-dep JSON reader;
+float POSITION/NORMAL/TEXCOORD, u16/u32 indices; external, embedded, and
+base64 buffers) and emits a Skyrim SE NIF (20.2.0.7 / user 12 / stream 100):
+`BSFadeNode -> BSTriShape + BSLightingShaderProperty + BSShaderTextureSet`.
+The byte layout reproduces a real shipping SSE static mesh field-for-field
+(vertexDesc `0x0003B00007650408`, 32-byte full-precision vertex, particleData
+trailer). Normals (area-weighted) and tangents (Lengyel) are computed when the
+source lacks them.
+
+Validation receipt: `tests/validate_model_codec.py` (21 checks) re-parses the
+emitted NIF with an independent reader, round-trips geometry full-float exact,
+and consumes a real modlist BSTriShape byte-for-byte.
+
+Honest nulls: no runtime NiObject-graph construction (file emission only), no
+skinned/animated meshes, first primitive/group only, no collision (bhk*)
+generation, no Draco/sparse glTF.
+
+---
+
+## 5. Native API reference (31 natives, script name `SkyrimBridge`)
 
 Console form: `cgf "SkyrimBridge.<name>" <args...>`
 
@@ -215,12 +236,64 @@ Console form: `cgf "SkyrimBridge.<name>" <args...>`
 | ConvertTextureFmt | `bool (string in, string out, string fmt)` |
 | TextureScanNow | `int (bool dryRun)` — converted (or would-convert) count |
 
+**ModelCodec**
+| Native | Signature |
+|---|---|
+| ConvertModel | `bool (string in, string out)` — OBJ/glTF/GLB in, NIF out |
+
 ---
 
-## 5. Config dialect (SBConfig)
+## 6. Config dialect (SBConfig)
 
 One flat-INI grammar everywhere: `[Section]`, `Key = Value`, `;` comments,
 `R,G,B[,A]` tuples, hex form IDs (`0x10A232`), `[Base:Qualifier]` override
 suffix. Parser: `src/core/SBConfig.h`. No third-party config formats in the
 runtime path; importers translate legacy files one-time where compatibility
 is needed.
+
+---
+
+## 7. External command channel (`[Native] CommandSurface`, ships OFF)
+
+`src/SB_CommandLayout.h` (the ABI contract, dependency-free; include it from
+any client) + `src/core/BridgeCommand.{h,cpp}` (plugin side) +
+`tools/SkyrimBridgeClient.h` (a header-only C++ client). A second shared-memory
+region, `SkyrimBridge_Command`, alongside the one-way game-state region, so an
+external tool drives the engine surface without the in-game console.
+
+**Protocol** (single-slot, sequence-gated, one in-flight request):
+1. Client fills `verb` + `arg0` + `arg1` + `argInt`, then publishes
+   `requestSeq` last.
+2. The plugin dispatches at most one pending request per frame on the game
+   thread (SEH-isolated, same fault budget as the frame update), writes
+   `status` + `resultInt` + `resultText`, then publishes
+   `responseSeq = requestSeq` last and signals the `SkyrimBridge_CommandReady`
+   event.
+3. Client waits until `responseSeq` equals its `requestSeq`, then reads.
+
+The block is 5184 bytes, `#pragma pack(1)`, guarded by a `static_assert`;
+`magic` = `'SBC1'`, `version` = 1. Status codes: `0` ok, `-1` unknown verb,
+`-2` bad argument, `-3` not found, `-4` failed. Large payloads (a full Weather
+dump) travel through the dumps directory exactly as the console natives do;
+the mailbox carries the trigger and a bounded 4 KiB text result.
+
+**Verb table**
+| Verb | Request | Response |
+|---|---|---|
+| `ping` | — | `resultInt` = 1, `"pong"` |
+| `reflect.list` | `arg0` = `"0"` or `"0x<formid>"` | schema or field listing |
+| `reflect.dump` | `arg0` = `"0x<formid>"` | INI text (also written to `dumps/<id>.ini`), `resultInt` = lines |
+| `reflect.apply` | `arg0` = `"0x<formid>"`; client edits `dumps/<id>.ini` first | `resultInt` = fields written |
+| `reflect.verify` | `arg0` = `"0x<formid>"`, `argInt` = 1 for strict (MUTATES) | `resultInt` = fields, 0 on failure |
+| `region.dump` | `arg0` = `"0x<region>"` | subrecord dump (also `dumps/<id>.region.ini`) |
+| `region.weather` | `arg0` = region, `arg1` = weather, `argInt` = chance | `resultInt` = entries edited |
+| `texture.convert` | `arg0` = in, `arg1` = out, `argInt` = 0/1/2 (RGBA8/BC1/BC3) | `resultInt` = ok |
+| `texture.scan` | `argInt` = 1 dry / 0 live | `resultInt` = converted, counts in text |
+| `model.convert` | `arg0` = in, `arg1` = out | `resultInt` = ok |
+
+Validation receipt: `tests/validate_command_protocol.py` (15 checks) verifies
+the 5184-byte ABI layout field-for-field against a Python `ctypes` mirror and
+runs a 200-round sequence-gated round-trip against a simulated dispatcher (no
+stale reads, no torn results, monotonic sequences). The C++ dispatch itself is
+game-bound: enable `[Native] CommandSurface`, run a client `ping`, and check
+the log for `BridgeCommand: command channel active`.
