@@ -369,6 +369,21 @@ namespace SB::PapyrusBridge
         return ok;
     }
 
+    // cgf "SkyrimBridge.ConvertModelEx" "in.obj" "out.nif" false true
+    // Full option surface: tree mode and/or convex-hull collision (the F18
+    // recipe: bhkConvexVerticesShape + templated static rigid body; a
+    // degenerate hull falls back to no collision). Walk-testing in-game is
+    // the collision acceptance oracle.
+    static bool ConvertModelEx(RE::StaticFunctionTag*, RE::BSFixedString a_in, RE::BSFixedString a_out,
+                               bool a_tree, bool a_collision)
+    {
+        bool ok = ModelCodec::ConvertToNIF(a_in.c_str(), a_out.c_str(), a_tree, a_collision);
+        SKSE::log::info("ModelCodec: {} -> {} [{}{}] : {}", a_in.c_str(), a_out.c_str(),
+                        a_tree ? "tree" : "static", a_collision ? "+collision" : "",
+                        ok ? "ok" : "failed");
+        return ok;
+    }
+
     // cgf "SkyrimBridge.SpawnModel" "in.obj"  — the pragmatic runtime-model
     // path. Materializes the mesh under meshes\SkyrimBridge\spawn\ (foreign
     // formats convert; a .nif copies), creates a dynamic Static form whose
@@ -473,9 +488,10 @@ namespace SB::PapyrusBridge
         vm->RegisterFunction("TextureScanNow",         "SkyrimBridge", TextureScanNow);
         vm->RegisterFunction("ConvertModel",           "SkyrimBridge", ConvertModel);
         vm->RegisterFunction("ConvertModelTree",       "SkyrimBridge", ConvertModelTree);
+        vm->RegisterFunction("ConvertModelEx",         "SkyrimBridge", ConvertModelEx);
         vm->RegisterFunction("SpawnModel",             "SkyrimBridge", SpawnModel);
 
-        SKSE::log::info("PapyrusBridge: registered 34 native functions under 'SkyrimBridge'");
+        SKSE::log::info("PapyrusBridge: registered 35 native functions under 'SkyrimBridge'");
         return true;
     }
 }

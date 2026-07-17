@@ -53,6 +53,7 @@ add_commonlibsse_plugin(
         src/core/TextureAutoConvert.cpp
         src/core/TextureBC7.cpp
         src/core/TextureLoadHook.cpp
+        src/core/ConvexHull.cpp
         src/core/ModelCodec.cpp
         src/core/ModelSpawn.cpp
         src/core/BridgeCommand.cpp

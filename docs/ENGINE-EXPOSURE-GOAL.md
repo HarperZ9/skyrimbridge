@@ -385,6 +385,19 @@ order agreed with the operator:
     fields. Honest scope note in-schema: placement (which landscape textures
     grow a grass) lives on TESLandTexture, a future one-block add; grass
     LOD/cache stays NGIO/DynDOLOD territory.
+19. ~~Convex-hull collision generation~~ DONE 2026-07-16 late (the F18
+    recipe implemented): `src/core/ConvexHull.{h,cpp}` (quickhull,
+    global-scan variant, doubles internally, degenerate input refused) +
+    collision emission in ModelCodec (bhkConvexVerticesShape in Havok
+    units, 250-byte donor-templated static bhkRigidBody, bhkCollisionObject,
+    BSXFlags 130, root refs). Surfaces: ConvertModelEx native (35th),
+    argInt bit 2 on model.convert/model.spawn, "With collision" checkbox in
+    the addon (v1.2.0). Offline-proven: tests/validate_collision_gen.py,
+    19/19 (hull properties, donor-byte template consistency, container
+    round-trip, Havok scale). Game-bound: WALK against a spawned hull
+    (protocol section 7); a mis-scaled hull looks exactly like the two
+    ported outliers the investigation found. Convex cannot be concave.
+
 18. ~~Convex-hull collision investigation~~ DONE 2026-07-16 late, verdict
     GREEN (`docs/COLLISION-INVESTIGATION-F18.md`). The premise is confirmed
     against real files: 323 of 342 convex-collision NIFs in a 6,000-file

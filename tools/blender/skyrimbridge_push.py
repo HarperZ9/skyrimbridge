@@ -32,7 +32,7 @@
 bl_info = {
     "name": "SkyrimBridge Push to Game",
     "author": "Zain Dana Harper",
-    "version": (1, 1, 0),
+    "version": (1, 2, 0),
     "blender": (3, 0, 0),
     "location": "View3D > Sidebar > SkyrimBridge",
     "description": "Push the selected mesh into a running Skyrim SE via SkyrimBridge",
@@ -134,14 +134,17 @@ def sanitize_name(name):
     return s or "pushed"
 
 
-def push_glb(glb_path, timeout=30.0, channel_name=CHANNEL_NAME, tree=False):
+def push_glb(glb_path, timeout=30.0, channel_name=CHANNEL_NAME, tree=False,
+             collision=False):
     """Spawn an exported mesh in the running game. tree=True converts it as a
-    wind-animated tree (procedural sway weights + Tree_Anim shader).
+    wind-animated tree (procedural sway weights + Tree_Anim shader);
+    collision=True adds a convex-hull collision (walkable, cannot be concave).
     Returns (form_id, message). Raises ChannelError on any failure."""
     ch = SBChannel(channel_name).open()
     try:
-        status, form_id, text = ch.request("model.spawn", glb_path,
-                                           arg_int=1 if tree else 0, timeout=timeout)
+        status, form_id, text = ch.request(
+            "model.spawn", glb_path,
+            arg_int=(1 if tree else 0) | (2 if collision else 0), timeout=timeout)
     finally:
         ch.close()
     if status != 0 or not form_id:
@@ -187,7 +190,8 @@ if bpy is not None:
                 return {"CANCELLED"}
 
             try:
-                form_id, text = push_glb(glb, tree=wm.skyrimbridge_tree)
+                form_id, text = push_glb(glb, tree=wm.skyrimbridge_tree,
+                                         collision=wm.skyrimbridge_collision)
             except ChannelError as e:
                 wm.skyrimbridge_last = str(e)
                 self.report({"ERROR"}, wm.skyrimbridge_last)
@@ -208,6 +212,8 @@ if bpy is not None:
             col.operator("skyrimbridge.push", icon="EXPORT")
             col.prop(context.window_manager, "skyrimbridge_tree",
                      text="Push as tree (wind sway)")
+            col.prop(context.window_manager, "skyrimbridge_collision",
+                     text="With collision (convex hull)")
             last = getattr(context.window_manager, "skyrimbridge_last", "")
             if last:
                 for chunk in [last[i:i + 38] for i in range(0, len(last), 38)]:
@@ -223,6 +229,10 @@ if bpy is not None:
             default=False, name="Push as tree",
             description="Convert with procedural wind sway weights and the "
                         "Tree_Anim shader flag (trunk stiff, canopy sways)")
+        bpy.types.WindowManager.skyrimbridge_collision = bpy.props.BoolProperty(
+            default=False, name="With collision",
+            description="Generate convex-hull collision (walkable; a hull "
+                        "cannot be concave, so openings fill in)")
         for c in _classes:
             bpy.utils.register_class(c)
 
@@ -231,6 +241,7 @@ if bpy is not None:
             bpy.utils.unregister_class(c)
         del bpy.types.WindowManager.skyrimbridge_last
         del bpy.types.WindowManager.skyrimbridge_tree
+        del bpy.types.WindowManager.skyrimbridge_collision
 
     if __name__ == "__main__":
         register()

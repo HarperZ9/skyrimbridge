@@ -17,9 +17,9 @@ Usage:
   python sb_command_client.py texture.convert in.png out.dds --int 2   (0/1/2/3 = RGBA8/BC1/BC3/BC7)
   python sb_command_client.py texture.foliage in.png out.dds --int 2   (+ threshold*256; 0 -> 128)
   python sb_command_client.py texture.scan --int 1                     (1 dry, 0 live)
-  python sb_command_client.py model.convert in.obj out.nif    (--int 1 = tree mode)
+  python sb_command_client.py model.convert in.obj out.nif    (--int bits: 1 tree, 2 collision)
   python sb_command_client.py model.spawn in.obj      (places at player; MUTATES the
-                                                       save; --int 1 = tree mode)
+                                                       save; --int bits: 1 tree, 2 collision)
 
 Dispatch happens one request per frame on the game thread: if the game is
 paused (menus, console open), the response waits until it unpauses.

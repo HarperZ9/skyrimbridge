@@ -208,6 +208,18 @@ any shading oddity (the grayscale weights also feed vertex-color shading).
 A static result is DATA, not failure: it tells us TREE-form placement is the
 missing piece, which becomes its own lane.
 
+**Collision (F18 follow-on):** spawn with collision, either
+`cgf "SkyrimBridge.ConvertModelEx" "Data/test.obj" "Data/meshes/SkyrimBridge/spawn/test.nif" false true`
+then `SpawnModel` on the .nif, or tick "With collision" in the addon. The
+acceptance test is physical: WALK into the spawned mesh. Pass: you collide
+with a hull that hugs the visible shape at the right size (arrows and
+dropped items also land on it). FAIL modes worth recording separately: no
+collision at all (chain rejected by the engine), collision far too large or
+small (scale wrong; the investigation found real ported assets broken
+exactly this way), or collision offset from the visible mesh. Remember a
+hull is convex: walking "into" a concave opening of the model stopping you
+early is expected behavior, not a failure.
+
 **Blender addon path (same feature, the QoL front end):** install
 `tools/blender/skyrimbridge_push.py` (Edit > Preferences > Add-ons >
 Install...), enable it, open the View3D sidebar (N) > SkyrimBridge. With the

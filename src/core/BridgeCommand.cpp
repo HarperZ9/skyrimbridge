@@ -178,13 +178,14 @@ namespace SB
                 SetText(b, msg);
                 return kCmdOK;
             }
-            if (verb == "model.convert") {         // argInt 1 = tree mode
-                b->resultInt = ModelCodec::ConvertToNIF(b->arg0, b->arg1, b->argInt == 1) ? 1 : 0;
+            if (verb == "model.convert") {         // argInt bits: 1 = tree, 2 = collision
+                b->resultInt = ModelCodec::ConvertToNIF(b->arg0, b->arg1,
+                                                        (b->argInt & 1) != 0, (b->argInt & 2) != 0) ? 1 : 0;
                 return b->resultInt ? kCmdOK : kCmdFailed;
             }
-            if (verb == "model.spawn") {           // MUTATES the save (per-op); argInt 1 = tree mode
+            if (verb == "model.spawn") {           // MUTATES the save (per-op); argInt bits: 1 = tree, 2 = collision
                 std::string err;
-                auto id = ModelSpawn::SpawnAtPlayer(b->arg0, err, b->argInt == 1);
+                auto id = ModelSpawn::SpawnAtPlayer(b->arg0, err, (b->argInt & 1) != 0, (b->argInt & 2) != 0);
                 b->resultInt = static_cast<std::int32_t>(id);
                 if (id) {
                     char msg[48];

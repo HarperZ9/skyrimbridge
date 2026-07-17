@@ -163,6 +163,12 @@ cgf "SkyrimBridge.TextureScanNow" true                      ; dry-run the tree s
   hand-built blocks (every mode) and real modlist DXT1/DXT5 textures; encode
   output decodes identically under PIL and our model; PSNR floor; lossless
   round-trip on exactly-representable blocks; TGA layout via PIL read-back.
+- `tests/validate_collision_gen.py` — 19 checks. Quickhull held to the hull
+  properties directly (containment, subset, unit planes, face support,
+  volume, exact cube/octahedron answers, determinism, degenerate refusals);
+  the 250-byte rigid-body template re-derived from its donor NIF and
+  compared byte-for-byte to the shipped source; a ported-writer container
+  round-trip (chain refs, template patch, Havok scale, BSXFlags).
 - `tests/validate_tree_wind.py` — 22 checks. The empirical mapping asserted
   on real animated trees (grayscale weights in [127,255], rising with
   distance from base, Tree_Anim bit 29, constant per-shape alpha,
@@ -222,14 +228,24 @@ extremities (weight = `0.5 + 0.5 * e^1.5`, e = normalized distance from the
 trunk base), vertex alpha 255 (the vanilla-accepted constant; the aspens
 ship a constant 68 whose semantics are an unrecovered honest null).
 
+**Collision** (`ConvertModelEx`, or `argInt` bit 2 on the model verbs): the
+F18 recipe implemented. A quickhull over the mesh (degenerate input falls
+back to no collision), emitted as `bhkConvexVerticesShape` (stone material,
+vertices and plane offsets in Havok units, ~1/70 scale) behind a 250-byte
+`bhkRigidBody` byte-templated from a known-good layer-1 static (the receipt
+re-derives the template from the donor file and compares), plus
+`bhkCollisionObject` and root `BSXFlags`. A convex hull cannot be concave:
+an archway's opening fills in. Walk-testing in-game is the acceptance
+oracle.
+
 Honest nulls: no skinned/animated meshes, first primitive/group only, no
-collision (bhk*) generation, no Draco/sparse glTF; a spawned mesh's material
+concave/MOPP mesh collision, no Draco/sparse glTF; a spawned mesh's material
 is only as good as what the source carried (an untextured OBJ renders flat);
 whether a STAT-placed reference sways (vs needing a TREE form) is game-bound.
 
 ---
 
-## 5. Native API reference (34 natives, script name `SkyrimBridge`)
+## 5. Native API reference (35 natives, script name `SkyrimBridge`)
 
 Console form: `cgf "SkyrimBridge.<name>" <args...>`
 
@@ -290,6 +306,7 @@ Console form: `cgf "SkyrimBridge.<name>" <args...>`
 |---|---|
 | ConvertModel | `bool (string in, string out)` — OBJ/glTF/GLB in, NIF out |
 | ConvertModelTree | `bool (string in, string out)` — tree mode: wind vertex colors + Tree_Anim + BSLeafAnimNode root |
+| ConvertModelEx | `bool (string in, string out, bool tree, bool collision)` — full option surface |
 | SpawnModel | `int (string in)` — convert + place at the player via the engine loader; returns the ref's FormID (MUTATES the save) |
 
 ---
@@ -344,8 +361,8 @@ the mailbox carries the trigger and a bounded 4 KiB text result.
 | `texture.convert` | `arg0` = in, `arg1` = out, `argInt` = 0/1/2/3 (RGBA8/BC1/BC3/BC7) | `resultInt` = ok |
 | `texture.foliage` | `arg0` = in, `arg1` = out, `argInt` = fmt \| (threshold << 8), threshold 0 -> 128 | coverage-preserving mips; `resultInt` = ok |
 | `texture.scan` | `argInt` = 1 dry / 0 live | `resultInt` = converted, counts in text |
-| `model.convert` | `arg0` = in, `arg1` = out, `argInt` = 1 for tree mode | `resultInt` = ok |
-| `model.spawn` | `arg0` = in (foreign mesh or .nif), `argInt` = 1 for tree mode | `resultInt` = placed ref FormID as an int32 bit pattern (0xFFxxxxxx arrives negative; mask with 0xFFFFFFFF). MUTATES the save |
+| `model.convert` | `arg0` = in, `arg1` = out, `argInt` bits: 1 = tree, 2 = collision | `resultInt` = ok |
+| `model.spawn` | `arg0` = in (foreign mesh or .nif), `argInt` bits: 1 = tree, 2 = collision | `resultInt` = placed ref FormID as an int32 bit pattern (0xFFxxxxxx arrives negative; mask with 0xFFFFFFFF). MUTATES the save |
 
 Validation receipt: `tests/validate_command_protocol.py` (15 checks) verifies
 the 5184-byte ABI layout field-for-field against a Python `ctypes` mirror and

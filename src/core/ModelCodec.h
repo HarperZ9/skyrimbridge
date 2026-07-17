@@ -15,9 +15,9 @@
 //  and tangents are computed when the source omits them.
 //
 //  Honest nulls (not faked): skinned/animated meshes, multiple sub-meshes per
-//  file (only the first primitive/group is emitted), collision (bhk*),
-//  Draco-compressed or sparse glTF accessors, and the RUNTIME NiObject-graph
-//  construction path (the ambitious 20%) are NOT done.
+//  file (only the first primitive/group is emitted), Draco-compressed or
+//  sparse glTF accessors are NOT done. Collision is available as an optional
+//  convex hull (F18 recipe); concave/MOPP mesh collision is NOT done.
 //
 //  Author: Zain Dana Harper
 //  License: MIT
@@ -63,11 +63,18 @@ namespace SB::ModelCodec
     // at canopy extremities), SLSF2_Tree_Anim set on the shader, and a
     // BSLeafAnimNode root. The mapping is derived empirically from real
     // animated tree assets; receipt: tests/validate_tree_wind.py.
-    std::vector<std::uint8_t> WriteNIF(const Mesh& m, bool treeMode = false);
+    //
+    // collision emits MOPP-free convex-hull collision (the F18 recipe:
+    // bhkConvexVerticesShape + a known-good static bhkRigidBody template +
+    // bhkCollisionObject + BSXFlags; docs/COLLISION-INVESTIGATION-F18.md).
+    // A degenerate hull falls back to no collision. Convex cannot be
+    // concave: an archway's opening fills in; walk-testing is the oracle.
+    std::vector<std::uint8_t> WriteNIF(const Mesh& m, bool treeMode = false,
+                                       bool collision = false);
 
     // Convenience: any supported input -> .nif on disk.
     bool ConvertToNIF(const std::filesystem::path& in, const std::filesystem::path& out,
-                      bool treeMode = false);
+                      bool treeMode = false, bool collision = false);
 
     // Half-float codec (exposed for the offline validator).
     std::uint16_t FloatToHalf(float f);

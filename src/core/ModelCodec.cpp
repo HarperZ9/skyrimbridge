@@ -9,8 +9,10 @@
 //=============================================================================
 
 #include "ModelCodec.h"
+#include "ConvexHull.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <fstream>
@@ -144,7 +146,7 @@ namespace SB::ModelCodec
     }
 
     // ── NIF writer ───────────────────────────────────────────────────────
-    std::vector<std::uint8_t> WriteNIF(const Mesh& mesh, bool treeMode)
+    std::vector<std::uint8_t> WriteNIF(const Mesh& mesh, bool treeMode, bool collision)
     {
         Mesh m = mesh;
         FinalizeMesh(m);
@@ -193,16 +195,28 @@ namespace SB::ModelCodec
             }
         }
 
+        // ── collision (F18 recipe): convex hull -> bhk chain ─────────────
+        // Blocks 4..7 when present: bhkConvexVerticesShape, bhkRigidBody
+        // (250-byte known-good static template, shape ref patched),
+        // bhkCollisionObject, BSXFlags. A degenerate hull (planar input)
+        // falls back to no collision rather than a broken shape.
+        std::vector<Vec3> hullV;
+        std::vector<std::array<float, 4>> hullP;
+        const bool haveCollision = collision && Hull::ConvexHull(m.positions, hullV, hullP);
+
         // ── block bodies ──────────────────────────────────────────────────
         const std::int32_t ROOT_NAME = 0, SHAPE_NAME = 1;
 
-        Buf b0;   // BSFadeNode (root)
-        b0.i32(ROOT_NAME); b0.u32(0); b0.i32(-1);            // name, 0 extra, controller
+        Buf b0;   // root node
+        b0.i32(ROOT_NAME);
+        b0.u32(haveCollision ? 1 : 0);                       // extra data list
+        if (haveCollision) b0.i32(7);                        //   -> BSXFlags
+        b0.i32(-1);                                          // controller
         b0.u32(0x0000000E);                                  // flags
         b0.f32(0); b0.f32(0); b0.f32(0);                     // translation
         b0.f32(1); b0.f32(0); b0.f32(0); b0.f32(0); b0.f32(1); b0.f32(0); b0.f32(0); b0.f32(0); b0.f32(1);  // rotation (identity)
         b0.f32(1.0f);                                        // scale
-        b0.i32(-1);                                          // collision
+        b0.i32(haveCollision ? 6 : -1);                      // collision -> bhkCollisionObject
         b0.u32(1); b0.i32(1);                                // 1 child -> block 1
         b0.u32(0);                                           // 0 effects
 
@@ -266,13 +280,72 @@ namespace SB::ModelCodec
         std::string slots[9] = { m.diffuse, m.normalMap, "", "", "", "", "", "", "" };
         for (auto& s : slots) b3.sized(s);
 
+        // ── collision block bodies (present only when the hull succeeded) ─
+        // Layout recovered and verified against real MOPP-free convex NIFs
+        // (docs/COLLISION-INVESTIGATION-F18.md). Vertices and plane offsets
+        // are in Havok units (game units / ~69.99).
+        Buf b4, b5, b6, b7;
+        if (haveCollision) {
+            constexpr float kInvHavokScale = 1.0f / 69.99125f;
+            b4.u32(0x1DD9C611);                              // material: SKY_HAV_MAT_STONE
+            b4.f32(0.05f);                                   // convex radius (wild range 0..0.05)
+            for (int k = 0; k < 2; ++k) {                    // 2x hkWorldObjCinfoProperty
+                b4.u32(0); b4.u32(0); b4.u32(0x80000000u);   // data, size, capacityAndFlags
+            }
+            b4.u32(static_cast<std::uint32_t>(hullV.size()));
+            for (auto& v : hullV) {
+                b4.f32(v.x * kInvHavokScale); b4.f32(v.y * kInvHavokScale);
+                b4.f32(v.z * kInvHavokScale); b4.f32(0.0f);
+            }
+            b4.u32(static_cast<std::uint32_t>(hullP.size()));
+            for (auto& p : hullP) {
+                b4.f32(p[0]); b4.f32(p[1]); b4.f32(p[2]);    // unit normal
+                b4.f32(p[3] * kInvHavokScale);               // plane offset scales with verts
+            }
+
+            // bhkRigidBody: byte template from a known-good layer-1 static
+            // (deerskullstatic.nif; machine-extracted, fixed-motion body).
+            // The receipt re-derives it from the same file and compares.
+            static const std::uint8_t kRigidBodyTemplate[250] = {
+                0x02,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x80,0x63,0x8B,0x1B,0x01,0x6F,0x6C,0x47,
+                0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x80,0x01,0x0A,0xFF,0xFF,
+                0x6C,0x47,0x72,0x6F,0x01,0x00,0x00,0x00,0x80,0x63,0x8B,0x1B,0x00,0x00,0x00,0x00,
+                0x01,0x6C,0xFF,0xFF,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+                0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xFF,0xFF,0x7F,0x3F,
+                0x67,0x21,0xA2,0xB3,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+                0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+                0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+                0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+                0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+                0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+                0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xCC,0x3D,0x00,0x00,0x4C,0x3D,
+                0x00,0x00,0x80,0x3F,0x00,0x00,0x80,0x3F,0x00,0x00,0x00,0x3F,0x00,0x00,0x00,0x00,
+                0xCD,0xCC,0xCC,0x3E,0xCD,0xCC,0xD0,0x42,0x5C,0x8F,0xFC,0x41,0x9A,0x99,0x19,0x3E,
+                0x05,0x01,0x01,0x00,0x00,0x00,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+                0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+            };
+            b5.raw(reinterpret_cast<const char*>(kRigidBodyTemplate), sizeof(kRigidBodyTemplate));
+            b5.v[0] = 4; b5.v[1] = 0; b5.v[2] = 0; b5.v[3] = 0;   // patch shape ref -> block 4
+
+            b6.i32(0);                                       // bhkCollisionObject: target = root
+            b6.u16(0x0081);                                  // flags (observed on real statics)
+            b6.i32(5);                                       // body -> bhkRigidBody
+
+            b7.i32(2);                                       // BSXFlags: name -> "BSX" (string 2)
+            b7.u32(130);                                     // value from the template donor static
+        }
+
         // ── header ────────────────────────────────────────────────────────
-        const std::vector<Buf*> blocks = { &b0, &b1, &b2, &b3 };
+        std::vector<Buf*> blocks = { &b0, &b1, &b2, &b3 };
         // Tree roots are BSLeafAnimNode in real assets (NiNode-identical
         // body; only the type differs), which drives the leaf-anim timing.
-        const char* typeNames[4] = { treeMode ? "BSLeafAnimNode" : "BSFadeNode",
-                                     "BSTriShape", "BSLightingShaderProperty", "BSShaderTextureSet" };
-        const std::uint16_t typeIndex[4] = { 0, 1, 2, 3 };
+        std::vector<const char*> typeNames = { treeMode ? "BSLeafAnimNode" : "BSFadeNode",
+                                               "BSTriShape", "BSLightingShaderProperty", "BSShaderTextureSet" };
+        if (haveCollision) {
+            blocks.insert(blocks.end(), { &b4, &b5, &b6, &b7 });
+            typeNames.insert(typeNames.end(), { "bhkConvexVerticesShape", "bhkRigidBody",
+                                                "bhkCollisionObject", "BSXFlags" });
+        }
 
         Buf h;
         const std::string hdr = "Gamebryo File Format, Version 20.2.0.7";
@@ -283,14 +356,16 @@ namespace SB::ModelCodec
         h.u32(static_cast<std::uint32_t>(blocks.size()));    // block count
         h.u32(100);                                          // BS version (SSE)
         h.shortstr(""); h.shortstr(""); h.shortstr("");      // author / process / export
-        h.u16(4);                                            // numBlockTypes
+        h.u16(static_cast<std::uint16_t>(typeNames.size())); // numBlockTypes
         for (auto* tn : typeNames) h.sized(tn);
-        for (auto ti : typeIndex) h.u16(ti);
+        for (std::uint16_t ti = 0; ti < blocks.size(); ++ti) h.u16(ti);   // one type per block
         for (auto* bl : blocks) h.u32(static_cast<std::uint32_t>(bl->v.size()));   // block sizes
-        std::string strs[2] = { m.name.empty() ? "Scene Root" : (m.name + " Root"), m.name.empty() ? "Mesh" : m.name };
+        std::vector<std::string> strs = { m.name.empty() ? "Scene Root" : (m.name + " Root"),
+                                          m.name.empty() ? "Mesh" : m.name };
+        if (haveCollision) strs.push_back("BSX");            // BSXFlags name (string index 2)
         std::uint32_t maxLen = 0;
         for (auto& s : strs) maxLen = std::max<std::uint32_t>(maxLen, static_cast<std::uint32_t>(s.size()));
-        h.u32(2);                                            // numStrings
+        h.u32(static_cast<std::uint32_t>(strs.size()));      // numStrings
         h.u32(maxLen);
         for (auto& s : strs) h.sized(s);
         h.u32(0);                                            // numGroups
@@ -635,11 +710,11 @@ namespace SB::ModelCodec
     }
 
     bool ConvertToNIF(const std::filesystem::path& in, const std::filesystem::path& out,
-                      bool treeMode)
+                      bool treeMode, bool collision)
     {
         Mesh m = LoadFile(in);
         if (!m.valid) return false;
-        auto bytes = WriteNIF(m, treeMode);
+        auto bytes = WriteNIF(m, treeMode, collision);
         if (bytes.empty()) return false;
         std::ofstream f(out, std::ios::binary | std::ios::trunc);
         if (!f) return false;
