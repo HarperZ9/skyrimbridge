@@ -385,9 +385,18 @@ order agreed with the operator:
     fields. Honest scope note in-schema: placement (which landscape textures
     grow a grass) lives on TESLandTexture, a future one-block add; grass
     LOD/cache stays NGIO/DynDOLOD territory.
-18. Convex-hull collision investigation (bhkConvexVerticesShape, MOPP-free;
-    confidence moderate until checked against real NIFs). (open, scoped
-    investigation before any code)
+18. ~~Convex-hull collision investigation~~ DONE 2026-07-16 late, verdict
+    GREEN (`docs/COLLISION-INVESTIGATION-F18.md`). The premise is confirmed
+    against real files: 323 of 342 convex-collision NIFs in a 6,000-file
+    survey ship bhkConvexVerticesShape with NO MOPP anywhere; the full block
+    chain's byte layout is recovered and verified (consumed == blockSize);
+    the Havok scale data brackets the canonical ~70 constant; the 250-byte
+    bhkRigidBody is constant-size and template-viable from a known-good
+    static. Two mis-scaled ported assets found in the wild show exactly what
+    in-game validation catches. Implementation (quickhull + template blocks,
+    OFF by default, walk-test as acceptance) is now a bounded follow-on
+    lane, not R&D. Honest limit: convex cannot be concave; MOPP-accurate
+    mesh collision stays out of scope.
 
 **Lane E: close the honest nulls already on record.**
 12. ~~Reverse `AELAS.dll`'s hooks / sun repositioning~~ DONE 2026-07-16 in two
