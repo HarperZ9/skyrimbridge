@@ -58,10 +58,12 @@ namespace SB::Hull
 
     bool ConvexHull(const std::vector<ModelCodec::Vec3>& points,
                     std::vector<ModelCodec::Vec3>& hullVerts,
-                    std::vector<std::array<float, 4>>& planes)
+                    std::vector<std::array<float, 4>>& planes,
+                    double* volumeOut)
     {
         hullVerts.clear();
         planes.clear();
+        if (volumeOut) *volumeOut = 0.0;
         if (points.size() < 4) return false;
 
         std::vector<D3> P;
@@ -197,6 +199,115 @@ namespace SB::Hull
         for (int idx : used) hullVerts.push_back(points[idx]);
         planes.reserve(uniq.size());
         for (auto& [k, pl] : uniq) planes.push_back(pl);
+        if (volumeOut) *volumeOut = volume;
+        return true;
+    }
+
+    // ── Approximate convex decomposition ─────────────────────────────────
+    namespace
+    {
+        using Vec3 = ModelCodec::Vec3;
+
+        std::vector<Vec3> Subset(const std::vector<Vec3>& pts, const std::vector<int>& idx)
+        {
+            std::vector<Vec3> s; s.reserve(idx.size());
+            for (int i : idx) s.push_back(pts[i]);
+            return s;
+        }
+
+        double VolumeOf(const std::vector<Vec3>& pts)
+        {
+            std::vector<Vec3> hv; std::vector<std::array<float, 4>> hp; double v = 0;
+            return ConvexHull(pts, hv, hp, &v) ? v : 0.0;
+        }
+
+        struct Part
+        {
+            std::vector<int> idx;
+            double vol = 0;
+            double reduction = -1;   // parent vol - best summed child vol
+            std::vector<int> childA, childB;
+        };
+
+        // Best split of a part: over each axis, try several split positions
+        // (not just the median) and keep the (axis, position) that most
+        // reduces the summed child hull volume. The position search is what
+        // lets a split align with a concave feature; a fixed median cut
+        // misses it when the shape is denser on one side (e.g. an L-solid).
+        // Leaves reduction < 0 if unsplittable.
+        void BestSplit(const std::vector<Vec3>& pts, Part& part)
+        {
+            part.reduction = -1;
+            const std::size_t n = part.idx.size();
+            if (n < 8) return;
+            static const double kFrac[] = { 0.20, 0.35, 0.50, 0.65, 0.80 };
+            for (int axis = 0; axis < 3; ++axis) {
+                std::vector<int> sorted = part.idx;
+                std::sort(sorted.begin(), sorted.end(), [&](int a, int b) {
+                    const Vec3& pa = pts[a]; const Vec3& pb = pts[b];
+                    return (axis == 0 ? pa.x : axis == 1 ? pa.y : pa.z) <
+                           (axis == 0 ? pb.x : axis == 1 ? pb.y : pb.z);
+                });
+                for (double frac : kFrac) {
+                    const std::size_t cut = static_cast<std::size_t>(n * frac);
+                    if (cut < 4 || n - cut < 4) continue;
+                    std::vector<int> a(sorted.begin(), sorted.begin() + cut);
+                    std::vector<int> b(sorted.begin() + cut, sorted.end());
+                    double va = VolumeOf(Subset(pts, a));
+                    double vb = VolumeOf(Subset(pts, b));
+                    if (va <= 0 || vb <= 0) continue;      // a child could not be hulled
+                    double red = part.vol - (va + vb);
+                    if (red > part.reduction) {
+                        part.reduction = red;
+                        part.childA = std::move(a);
+                        part.childB = std::move(b);
+                    }
+                }
+            }
+        }
+    }
+
+    bool ConvexDecompose(const std::vector<ModelCodec::Vec3>& points,
+                         int maxPieces, double concavityFrac,
+                         std::vector<std::vector<ModelCodec::Vec3>>& pieces)
+    {
+        pieces.clear();
+        if (points.size() < 4) return false;
+        if (maxPieces < 2 || points.size() < 8) {          // single-piece fall back
+            if (VolumeOf(points) <= 0) return false;
+            pieces.push_back(points);
+            return true;
+        }
+
+        std::vector<Part> parts(1);
+        parts[0].idx.resize(points.size());
+        for (std::size_t i = 0; i < points.size(); ++i) parts[0].idx[i] = static_cast<int>(i);
+        parts[0].vol = VolumeOf(points);
+        if (parts[0].vol <= 0) return false;
+        BestSplit(points, parts[0]);
+
+        while (static_cast<int>(parts.size()) < maxPieces) {
+            // Pick the part whose split reduces the most, gated by concavity.
+            int pick = -1; double bestRed = 0;
+            for (int i = 0; i < static_cast<int>(parts.size()); ++i) {
+                if (parts[i].reduction <= 0) continue;
+                if (parts[i].reduction < concavityFrac * parts[i].vol) continue;
+                if (parts[i].reduction > bestRed) { bestRed = parts[i].reduction; pick = i; }
+            }
+            if (pick < 0) break;                            // every part is convex enough
+
+            Part a, b;
+            a.idx = std::move(parts[pick].childA);
+            b.idx = std::move(parts[pick].childB);
+            a.vol = VolumeOf(Subset(points, a.idx));
+            b.vol = VolumeOf(Subset(points, b.idx));
+            BestSplit(points, a);
+            BestSplit(points, b);
+            parts[pick] = std::move(a);
+            parts.push_back(std::move(b));
+        }
+
+        for (auto& part : parts) pieces.push_back(Subset(points, part.idx));
         return true;
     }
 }

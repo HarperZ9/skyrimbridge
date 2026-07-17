@@ -220,6 +220,16 @@ exactly this way), or collision offset from the visible mesh. Remember a
 hull is convex: walking "into" a concave opening of the model stopping you
 early is expected behavior, not a failure.
 
+**Decomposed (concave-approximating) collision:** spawn a concave prop
+(an archway, a chair, an L-bracket) with a piece count, e.g.
+`cgf "SkyrimBridge.ConvertModelEx" "Data/arch.obj" "Data/meshes/SkyrimBridge/spawn/arch.nif" false true 8`
+then `SpawnModel` on the .nif (or model.spawn with argInt = 2 | (8<<8) over
+the channel). Walk THROUGH the concave opening: with a single hull it is
+blocked (the notch is filled); with decomposition you should pass through
+while still colliding with the solid parts. Record: does the opening clear,
+do the solid parts still stop you, any seam you can slip through (a gap
+between pieces). More pieces = tighter concavity, more physics cost.
+
 **Blender addon path (same feature, the QoL front end):** install
 `tools/blender/skyrimbridge_push.py` (Edit > Preferences > Add-ons >
 Install...), enable it, open the View3D sidebar (N) > SkyrimBridge. With the

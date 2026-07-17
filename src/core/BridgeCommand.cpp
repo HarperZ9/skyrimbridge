@@ -243,14 +243,19 @@ namespace SB
                 SetText(b, msg);
                 return kCmdOK;
             }
-            if (verb == "model.convert") {         // argInt bits: 1 = tree, 2 = collision
+            // argInt bits: 1 = tree, 2 = collision; high byte (>>8) = collision
+            // piece count (0/1 = single hull, >=2 = decomposed bhkListShape).
+            if (verb == "model.convert") {
+                int pieces = (b->argInt >> 8) & 0xFF; if (pieces < 1) pieces = 1;
                 b->resultInt = ModelCodec::ConvertToNIF(b->arg0, b->arg1,
-                                                        (b->argInt & 1) != 0, (b->argInt & 2) != 0) ? 1 : 0;
+                                                        (b->argInt & 1) != 0, (b->argInt & 2) != 0, pieces) ? 1 : 0;
                 return b->resultInt ? kCmdOK : kCmdFailed;
             }
-            if (verb == "model.spawn") {           // MUTATES the save (per-op); argInt bits: 1 = tree, 2 = collision
+            if (verb == "model.spawn") {           // MUTATES the save (per-op)
+                int pieces = (b->argInt >> 8) & 0xFF; if (pieces < 1) pieces = 1;
                 std::string err;
-                auto id = ModelSpawn::SpawnAtPlayer(b->arg0, err, (b->argInt & 1) != 0, (b->argInt & 2) != 0);
+                auto id = ModelSpawn::SpawnAtPlayer(b->arg0, err, (b->argInt & 1) != 0,
+                                                    (b->argInt & 2) != 0, pieces);
                 b->resultInt = static_cast<std::int32_t>(id);
                 if (id) {
                     char msg[48];

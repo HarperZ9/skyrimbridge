@@ -21,7 +21,9 @@ Usage:
   python sb_command_client.py texture.scan --int 1                     (1 dry, 0 live)
   python sb_command_client.py model.convert in.obj out.nif    (--int bits: 1 tree, 2 collision)
   python sb_command_client.py model.spawn in.obj      (places at player; MUTATES the
-                                                       save; --int bits: 1 tree, 2 collision)
+                                                       save; --int bits: 1 tree, 2 collision;
+                                                       high byte = collision piece count, e.g.
+                                                       2 | 8<<8 = 2050 for 8-piece decomposition)
 
 Dispatch happens one request per frame on the game thread: if the game is
 paused (menus, console open), the response waits until it unpauses.

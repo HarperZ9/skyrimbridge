@@ -434,12 +434,17 @@ namespace SB::PapyrusBridge
         return text.c_str();
     }
 
+    // a_collisionPieces: 0/1 = single convex hull, >=2 = decomposed
+    // bhkListShape (concave-approximating). Walk-testing is the oracle.
     static bool ConvertModelEx(RE::StaticFunctionTag*, RE::BSFixedString a_in, RE::BSFixedString a_out,
-                               bool a_tree, bool a_collision)
+                               bool a_tree, bool a_collision, std::int32_t a_collisionPieces)
     {
-        bool ok = ModelCodec::ConvertToNIF(a_in.c_str(), a_out.c_str(), a_tree, a_collision);
+        const int pieces = a_collisionPieces < 1 ? 1 : (a_collisionPieces > 32 ? 32 : a_collisionPieces);
+        bool ok = ModelCodec::ConvertToNIF(a_in.c_str(), a_out.c_str(), a_tree, a_collision, pieces);
         SKSE::log::info("ModelCodec: {} -> {} [{}{}] : {}", a_in.c_str(), a_out.c_str(),
-                        a_tree ? "tree" : "static", a_collision ? "+collision" : "",
+                        a_tree ? "tree" : "static",
+                        a_collision ? (pieces >= 2 ? "+collision x" + std::to_string(pieces) : "+collision")
+                                    : "",
                         ok ? "ok" : "failed");
         return ok;
     }

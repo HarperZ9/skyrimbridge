@@ -146,7 +146,8 @@ namespace SB::ModelCodec
     }
 
     // ── NIF writer ───────────────────────────────────────────────────────
-    std::vector<std::uint8_t> WriteNIF(const Mesh& mesh, bool treeMode, bool collision)
+    std::vector<std::uint8_t> WriteNIF(const Mesh& mesh, bool treeMode, bool collision,
+                                       int collisionPieces)
     {
         Mesh m = mesh;
         FinalizeMesh(m);
@@ -195,14 +196,50 @@ namespace SB::ModelCodec
             }
         }
 
-        // ── collision (F18 recipe): convex hull -> bhk chain ─────────────
-        // Blocks 4..7 when present: bhkConvexVerticesShape, bhkRigidBody
-        // (250-byte known-good static template, shape ref patched),
-        // bhkCollisionObject, BSXFlags. A degenerate hull (planar input)
-        // falls back to no collision rather than a broken shape.
-        std::vector<Vec3> hullV;
-        std::vector<std::array<float, 4>> hullP;
-        const bool haveCollision = collision && Hull::ConvexHull(m.positions, hullV, hullP);
+        // ── collision (F18/F19 + decomposition) ──────────────────────────
+        // One convex hull (F19), or a bhkListShape of convex pieces from an
+        // approximate convex decomposition when collisionPieces >= 2, which
+        // approximates concavity a single hull cannot
+        // (docs/COLLISION-INVESTIGATION-F18.md). Degenerate pieces are
+        // dropped; no valid piece -> no collision.
+        struct HullPiece { std::vector<Vec3> verts; std::vector<std::array<float, 4>> planes; };
+        std::vector<HullPiece> pieces;
+        if (collision) {
+            std::vector<std::vector<Vec3>> groups;
+            if (collisionPieces >= 2) {
+                // Densify so large flat triangles do not leave seams between
+                // pieces; cap the cloud to keep decomposition tractable
+                // (this runs on the frame thread for SpawnModel).
+                std::vector<Vec3> cloud = m.positions;
+                const bool dense = (nv + nt * 4) <= 20000;
+                if (dense) cloud.reserve(nv + nt * 4);
+                for (std::size_t i = 0; dense && i < nt; ++i) {
+                    const Vec3& a = m.positions[m.indices[i * 3 + 0]];
+                    const Vec3& b = m.positions[m.indices[i * 3 + 1]];
+                    const Vec3& c = m.positions[m.indices[i * 3 + 2]];
+                    cloud.push_back({ (a.x + b.x + c.x) / 3, (a.y + b.y + c.y) / 3, (a.z + b.z + c.z) / 3 });
+                    cloud.push_back({ (a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2 });
+                    cloud.push_back({ (b.x + c.x) / 2, (b.y + c.y) / 2, (b.z + c.z) / 2 });
+                    cloud.push_back({ (c.x + a.x) / 2, (c.y + a.y) / 2, (c.z + a.z) / 2 });
+                }
+                Hull::ConvexDecompose(cloud, collisionPieces, 0.05, groups);
+            } else {
+                groups.push_back(m.positions);
+            }
+            for (auto& g : groups) {
+                HullPiece hp;
+                if (Hull::ConvexHull(g, hp.verts, hp.planes))
+                    pieces.push_back(std::move(hp));
+            }
+        }
+        const int nPieces = static_cast<int>(pieces.size());
+        const bool haveCollision = nPieces > 0;
+        const bool useList = nPieces >= 2;
+        const int convexBase = 4;
+        const int listIdx    = useList ? convexBase + nPieces : -1;
+        const int rigidIdx   = convexBase + nPieces + (useList ? 1 : 0);
+        const int collObjIdx = rigidIdx + 1;
+        const int bsxIdx     = collObjIdx + 1;
 
         // ── block bodies ──────────────────────────────────────────────────
         const std::int32_t ROOT_NAME = 0, SHAPE_NAME = 1;
@@ -210,13 +247,13 @@ namespace SB::ModelCodec
         Buf b0;   // root node
         b0.i32(ROOT_NAME);
         b0.u32(haveCollision ? 1 : 0);                       // extra data list
-        if (haveCollision) b0.i32(7);                        //   -> BSXFlags
+        if (haveCollision) b0.i32(bsxIdx);                   //   -> BSXFlags
         b0.i32(-1);                                          // controller
         b0.u32(0x0000000E);                                  // flags
         b0.f32(0); b0.f32(0); b0.f32(0);                     // translation
         b0.f32(1); b0.f32(0); b0.f32(0); b0.f32(0); b0.f32(1); b0.f32(0); b0.f32(0); b0.f32(0); b0.f32(1);  // rotation (identity)
         b0.f32(1.0f);                                        // scale
-        b0.i32(haveCollision ? 6 : -1);                      // collision -> bhkCollisionObject
+        b0.i32(haveCollision ? collObjIdx : -1);             // collision -> bhkCollisionObject
         b0.u32(1); b0.i32(1);                                // 1 child -> block 1
         b0.u32(0);                                           // 0 effects
 
@@ -280,32 +317,43 @@ namespace SB::ModelCodec
         std::string slots[9] = { m.diffuse, m.normalMap, "", "", "", "", "", "", "" };
         for (auto& s : slots) b3.sized(s);
 
-        // ── collision block bodies (present only when the hull succeeded) ─
+        // ── collision block bodies (present only when a piece hulled) ────
         // Layout recovered and verified against real MOPP-free convex NIFs
-        // (docs/COLLISION-INVESTIGATION-F18.md). Vertices and plane offsets
-        // are in Havok units (game units / ~69.99).
-        Buf b4, b5, b6, b7;
+        // and a real bhkListShape (docs/COLLISION-INVESTIGATION-F18.md).
+        // Vertices and plane offsets are in Havok units (game units / ~70).
+        std::vector<Buf> convexBufs;
+        Buf listBuf, rigidBuf, collObjBuf, bsxBuf;
         if (haveCollision) {
             constexpr float kInvHavokScale = 1.0f / 69.99125f;
-            b4.u32(0x1DD9C611);                              // material: SKY_HAV_MAT_STONE
-            b4.f32(0.05f);                                   // convex radius (wild range 0..0.05)
-            for (int k = 0; k < 2; ++k) {                    // 2x hkWorldObjCinfoProperty
-                b4.u32(0); b4.u32(0); b4.u32(0x80000000u);   // data, size, capacityAndFlags
+            for (auto& piece : pieces) {
+                Buf cb;
+                cb.u32(0x1DD9C611);                          // material: SKY_HAV_MAT_STONE
+                cb.f32(0.05f);                               // convex radius
+                for (int k = 0; k < 2; ++k) { cb.u32(0); cb.u32(0); cb.u32(0x80000000u); }
+                cb.u32(static_cast<std::uint32_t>(piece.verts.size()));
+                for (auto& v : piece.verts) {
+                    cb.f32(v.x * kInvHavokScale); cb.f32(v.y * kInvHavokScale);
+                    cb.f32(v.z * kInvHavokScale); cb.f32(0.0f);
+                }
+                cb.u32(static_cast<std::uint32_t>(piece.planes.size()));
+                for (auto& p : piece.planes) {
+                    cb.f32(p[0]); cb.f32(p[1]); cb.f32(p[2]);
+                    cb.f32(p[3] * kInvHavokScale);
+                }
+                convexBufs.push_back(std::move(cb));
             }
-            b4.u32(static_cast<std::uint32_t>(hullV.size()));
-            for (auto& v : hullV) {
-                b4.f32(v.x * kInvHavokScale); b4.f32(v.y * kInvHavokScale);
-                b4.f32(v.z * kInvHavokScale); b4.f32(0.0f);
-            }
-            b4.u32(static_cast<std::uint32_t>(hullP.size()));
-            for (auto& p : hullP) {
-                b4.f32(p[0]); b4.f32(p[1]); b4.f32(p[2]);    // unit normal
-                b4.f32(p[3] * kInvHavokScale);               // plane offset scales with verts
+
+            if (useList) {                                   // bhkListShape wrapping the pieces
+                listBuf.u32(static_cast<std::uint32_t>(nPieces));
+                for (int i = 0; i < nPieces; ++i) listBuf.i32(convexBase + i);
+                listBuf.u32(0x1DD9C611);                     // material
+                for (int k = 0; k < 2; ++k) { listBuf.u32(0); listBuf.u32(0); listBuf.u32(0x80000000u); }
+                listBuf.u32(static_cast<std::uint32_t>(nPieces));   // numInts == numSubShapes
+                for (int i = 0; i < nPieces; ++i) listBuf.u32(0);   // per-child filters
             }
 
             // bhkRigidBody: byte template from a known-good layer-1 static
             // (deerskullstatic.nif; machine-extracted, fixed-motion body).
-            // The receipt re-derives it from the same file and compares.
             static const std::uint8_t kRigidBodyTemplate[250] = {
                 0x02,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x80,0x63,0x8B,0x1B,0x01,0x6F,0x6C,0x47,
                 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x80,0x01,0x0A,0xFF,0xFF,
@@ -324,27 +372,38 @@ namespace SB::ModelCodec
                 0x05,0x01,0x01,0x00,0x00,0x00,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
                 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
             };
-            b5.raw(reinterpret_cast<const char*>(kRigidBodyTemplate), sizeof(kRigidBodyTemplate));
-            b5.v[0] = 4; b5.v[1] = 0; b5.v[2] = 0; b5.v[3] = 0;   // patch shape ref -> block 4
+            rigidBuf.raw(reinterpret_cast<const char*>(kRigidBodyTemplate), sizeof(kRigidBodyTemplate));
+            const std::int32_t sref = useList ? listIdx : convexBase;   // rigidbody.shape
+            rigidBuf.v[0] = sref & 0xFF; rigidBuf.v[1] = (sref >> 8) & 0xFF;
+            rigidBuf.v[2] = (sref >> 16) & 0xFF; rigidBuf.v[3] = (sref >> 24) & 0xFF;
 
-            b6.i32(0);                                       // bhkCollisionObject: target = root
-            b6.u16(0x0081);                                  // flags (observed on real statics)
-            b6.i32(5);                                       // body -> bhkRigidBody
+            collObjBuf.i32(0);                               // target = root
+            collObjBuf.u16(0x0081);                          // flags (observed on real statics)
+            collObjBuf.i32(rigidIdx);                        // body -> bhkRigidBody
 
-            b7.i32(2);                                       // BSXFlags: name -> "BSX" (string 2)
-            b7.u32(130);                                     // value from the template donor static
+            bsxBuf.i32(2);                                   // BSXFlags name -> "BSX" (string 2)
+            bsxBuf.u32(130);
         }
 
-        // ── header ────────────────────────────────────────────────────────
+        // ── header (deduplicated block-type table) ───────────────────────
         std::vector<Buf*> blocks = { &b0, &b1, &b2, &b3 };
-        // Tree roots are BSLeafAnimNode in real assets (NiNode-identical
-        // body; only the type differs), which drives the leaf-anim timing.
-        std::vector<const char*> typeNames = { treeMode ? "BSLeafAnimNode" : "BSFadeNode",
-                                               "BSTriShape", "BSLightingShaderProperty", "BSShaderTextureSet" };
+        std::vector<const char*> perBlockType = { treeMode ? "BSLeafAnimNode" : "BSFadeNode",
+                                                  "BSTriShape", "BSLightingShaderProperty",
+                                                  "BSShaderTextureSet" };
+        for (auto& cb : convexBufs) { blocks.push_back(&cb); perBlockType.push_back("bhkConvexVerticesShape"); }
+        if (useList) { blocks.push_back(&listBuf); perBlockType.push_back("bhkListShape"); }
         if (haveCollision) {
-            blocks.insert(blocks.end(), { &b4, &b5, &b6, &b7 });
-            typeNames.insert(typeNames.end(), { "bhkConvexVerticesShape", "bhkRigidBody",
-                                                "bhkCollisionObject", "BSXFlags" });
+            blocks.push_back(&rigidBuf);   perBlockType.push_back("bhkRigidBody");
+            blocks.push_back(&collObjBuf); perBlockType.push_back("bhkCollisionObject");
+            blocks.push_back(&bsxBuf);     perBlockType.push_back("BSXFlags");
+        }
+        std::vector<std::string> typeList;
+        std::vector<std::uint16_t> typeIndex;
+        for (auto* t : perBlockType) {
+            std::uint16_t ti = 0;
+            for (; ti < typeList.size(); ++ti) if (typeList[ti] == t) break;
+            if (ti == typeList.size()) typeList.push_back(t);
+            typeIndex.push_back(ti);
         }
 
         Buf h;
@@ -356,9 +415,9 @@ namespace SB::ModelCodec
         h.u32(static_cast<std::uint32_t>(blocks.size()));    // block count
         h.u32(100);                                          // BS version (SSE)
         h.shortstr(""); h.shortstr(""); h.shortstr("");      // author / process / export
-        h.u16(static_cast<std::uint16_t>(typeNames.size())); // numBlockTypes
-        for (auto* tn : typeNames) h.sized(tn);
-        for (std::uint16_t ti = 0; ti < blocks.size(); ++ti) h.u16(ti);   // one type per block
+        h.u16(static_cast<std::uint16_t>(typeList.size()));  // numBlockTypes
+        for (auto& tn : typeList) h.sized(tn);
+        for (auto ti : typeIndex) h.u16(ti);                 // per-block type index
         for (auto* bl : blocks) h.u32(static_cast<std::uint32_t>(bl->v.size()));   // block sizes
         std::vector<std::string> strs = { m.name.empty() ? "Scene Root" : (m.name + " Root"),
                                           m.name.empty() ? "Mesh" : m.name };
@@ -710,11 +769,11 @@ namespace SB::ModelCodec
     }
 
     bool ConvertToNIF(const std::filesystem::path& in, const std::filesystem::path& out,
-                      bool treeMode, bool collision)
+                      bool treeMode, bool collision, int collisionPieces)
     {
         Mesh m = LoadFile(in);
         if (!m.valid) return false;
-        auto bytes = WriteNIF(m, treeMode, collision);
+        auto bytes = WriteNIF(m, treeMode, collision, collisionPieces);
         if (bytes.empty()) return false;
         std::ofstream f(out, std::ios::binary | std::ios::trunc);
         if (!f) return false;

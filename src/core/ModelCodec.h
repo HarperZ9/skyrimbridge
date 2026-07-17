@@ -64,17 +64,19 @@ namespace SB::ModelCodec
     // BSLeafAnimNode root. The mapping is derived empirically from real
     // animated tree assets; receipt: tests/validate_tree_wind.py.
     //
-    // collision emits MOPP-free convex-hull collision (the F18 recipe:
-    // bhkConvexVerticesShape + a known-good static bhkRigidBody template +
-    // bhkCollisionObject + BSXFlags; docs/COLLISION-INVESTIGATION-F18.md).
-    // A degenerate hull falls back to no collision. Convex cannot be
-    // concave: an archway's opening fills in; walk-testing is the oracle.
+    // collision emits MOPP-free convex collision (docs/COLLISION-
+    // INVESTIGATION-F18.md). collisionPieces == 1 is a single convex hull
+    // (F19); collisionPieces >= 2 runs approximate convex decomposition and
+    // wraps the pieces in a bhkListShape, approximating concavity a single
+    // hull cannot. Degenerate pieces are dropped; no valid piece -> no
+    // collision. Walk-testing is the acceptance oracle (concave/MOPP mesh
+    // collision stays out of scope; the MOPP bytecode is Havok-SDK-bound).
     std::vector<std::uint8_t> WriteNIF(const Mesh& m, bool treeMode = false,
-                                       bool collision = false);
+                                       bool collision = false, int collisionPieces = 1);
 
     // Convenience: any supported input -> .nif on disk.
     bool ConvertToNIF(const std::filesystem::path& in, const std::filesystem::path& out,
-                      bool treeMode = false, bool collision = false);
+                      bool treeMode = false, bool collision = false, int collisionPieces = 1);
 
     // Half-float codec (exposed for the offline validator).
     std::uint16_t FloatToHalf(float f);

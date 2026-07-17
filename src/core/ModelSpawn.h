@@ -24,8 +24,10 @@ namespace SB::ModelSpawn
 {
     // Returns the placed reference's FormID, 0 on failure with the failing
     // stage named in err (also logged). treeMode converts foreign meshes as
-    // wind-animated trees; collision adds a convex hull (both apply to the
-    // conversion only; a .nif copies as-is).
+    // wind-animated trees; collision adds convex collision, collisionPieces
+    // >= 2 as a decomposed bhkListShape (all apply to the conversion only;
+    // a .nif copies as-is).
     std::uint32_t SpawnAtPlayer(const std::filesystem::path& in, std::string& err,
-                                bool treeMode = false, bool collision = false);
+                                bool treeMode = false, bool collision = false,
+                                int collisionPieces = 1);
 }

@@ -168,6 +168,12 @@ cgf "SkyrimBridge.TextureScanNow" true                      ; dry-run the tree s
   against known-by-construction files: PIL PNG (independent writer), legacy
   DXT5 and DX10 BC7 DDS containers, TGA, BMP, and an unknown-content
   refusal.
+- `tests/validate_convex_decompose.py` — 18 checks. The decomposer on a
+  concave L-solid (union covers every input point with no gaps; phantom
+  notch collision cut 0.44 -> 0.08 vs a single hull; full true-solid
+  coverage kept; deterministic; small-input fallback), and the bhkListShape
+  container round-trip (numSub/refs/material/two cinfo/numInts/filters,
+  36+8N, chain refs) via a ported writer and the F18 parser.
 - `tests/validate_collision_gen.py` — 19 checks. Quickhull held to the hull
   properties directly (containment, subset, unit planes, face support,
   volume, exact cube/octahedron answers, determinism, degenerate refusals);
@@ -233,15 +239,21 @@ extremities (weight = `0.5 + 0.5 * e^1.5`, e = normalized distance from the
 trunk base), vertex alpha 255 (the vanilla-accepted constant; the aspens
 ship a constant 68 whose semantics are an unrecovered honest null).
 
-**Collision** (`ConvertModelEx`, or `argInt` bit 2 on the model verbs): the
-F18 recipe implemented. A quickhull over the mesh (degenerate input falls
-back to no collision), emitted as `bhkConvexVerticesShape` (stone material,
-vertices and plane offsets in Havok units, ~1/70 scale) behind a 250-byte
-`bhkRigidBody` byte-templated from a known-good layer-1 static (the receipt
-re-derives the template from the donor file and compares), plus
-`bhkCollisionObject` and root `BSXFlags`. A convex hull cannot be concave:
-an archway's opening fills in. Walk-testing in-game is the acceptance
-oracle.
+**Collision** (`ConvertModelEx(in, out, tree, collision, pieces)`, or
+`argInt` bit 2 + high byte on the model verbs): a quickhull over the mesh
+emitted as `bhkConvexVerticesShape` (stone material, vertices and plane
+offsets in Havok units, ~1/70 scale) behind a 250-byte `bhkRigidBody`
+byte-templated from a known-good layer-1 static, plus `bhkCollisionObject`
+and root `BSXFlags`. With `pieces >= 2`, an approximate convex
+decomposition (greedy volume-reducing splits with per-axis position search)
+partitions the mesh and wraps the piece hulls in a `bhkListShape`
+(layout recovered byte-exact from real files: `numSub`, refs, material, two
+`hkWorldObjCinfoProperty`, `numInts == numSub`, filters; `36 + 8N` bytes),
+which approximates concavity a single hull cannot. The union of piece hulls
+covers every mesh vertex (no gaps); on a concave L-solid the decomposition
+cut phantom notch collision from 0.44 to 0.08. Exact concave (mesh) collision
+needs MOPP, which is Havok-SDK bytecode and stays out of scope. Walk-testing
+is the acceptance oracle.
 
 Honest nulls: no skinned/animated meshes, first primitive/group only, no
 concave/MOPP mesh collision, no Draco/sparse glTF; a spawned mesh's material
@@ -311,7 +323,7 @@ Console form: `cgf "SkyrimBridge.<name>" <args...>`
 |---|---|
 | ConvertModel | `bool (string in, string out)` — OBJ/glTF/GLB in, NIF out |
 | ConvertModelTree | `bool (string in, string out)` — tree mode: wind vertex colors + Tree_Anim + BSLeafAnimNode root |
-| ConvertModelEx | `bool (string in, string out, bool tree, bool collision)` — full option surface |
+| ConvertModelEx | `bool (string in, string out, bool tree, bool collision, int pieces)` — pieces >= 2 = decomposed bhkListShape collision |
 | SpawnModel | `int (string in)` — convert + place at the player via the engine loader; returns the ref's FormID (MUTATES the save) |
 
 **Diagnostics**

@@ -468,6 +468,21 @@ category table: `docs/PAIN-POINTS-ASSESSMENT-2026-07.md`. Build order:
     first question of every texture-pipeline debugging session;
     offline-proven by `tests/validate_texture_info.py`, 6/6. FormChain and
     the schema are engine-bound reads, compile-verified as always.
+24. ~~Concave collision via convex decomposition~~ DONE 2026-07-17: closes
+    F19's "convex cannot be concave" null the buildable way (MOPP stays
+    Havok-SDK-bound; decode evidence in the investigation).
+    `ConvexHull.cpp` gains `ConvexDecompose` (greedy volume-reducing binary
+    splits with per-axis position search, degenerate-safe), and ModelCodec
+    emits a `bhkListShape` of the piece hulls when `collisionPieces >= 2`.
+    The bhkListShape layout was recovered byte-exact from real files
+    (ms11unholyaltar n=5, daedricwaraxe n=2; 36+8N). Surfaces: ConvertModelEx
+    gains a pieces arg; model.convert/model.spawn argInt high byte carries
+    the piece count. Offline-proven: `tests/validate_convex_decompose.py`,
+    18/18 (union covers every vertex, phantom notch collision 0.44->0.08 on
+    an L-solid, container round-trip). The single-hull path stays
+    byte-identical (F19 receipt still 19/19). Game-bound: walk a spawned
+    decomposed hull (protocol section 11). MOPP next (verify-first: decode
+    the real opcode dialect, builder + interpreter as the offline oracle).
 
 **Lane E: close the honest nulls already on record.**
 12. ~~Reverse `AELAS.dll`'s hooks / sun repositioning~~ DONE 2026-07-16 in two

@@ -90,8 +90,9 @@ namespace SB
     //                  preserving mips for alpha-tested foliage. -> resultInt = ok
     //   texture.scan   argInt = 1 (dry) | 0 (live) -> resultInt = converted
     //   model.convert  arg0 = in, arg1 = out, argInt bits: 1 = tree mode
-    //                  (wind vertex colors + Tree_Anim), 2 = convex-hull
-    //                  collision -> resultInt = ok
+    //                  (wind vertex colors + Tree_Anim), 2 = collision; high
+    //                  byte (argInt>>8) = collision piece count (>=2 =
+    //                  decomposed bhkListShape) -> resultInt = ok
     //   model.spawn    arg0 = in (foreign mesh or .nif), argInt bits as
     //                  model.convert -> resultInt = placed reference FormID
     //                  (0 = failed). MUTATES the save.

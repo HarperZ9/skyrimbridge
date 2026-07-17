@@ -212,7 +212,7 @@ if os.path.exists(DONOR):
 check("template byte-identical to the donor static's rigid body",
       donor is not None and donor == shipped)
 check("F18 constants in shipped source",
-      all(s in src for s in ("0x1DD9C611", "69.99125", "0x80000000u", "b7.u32(130)", "0x0081")))
+      all(s in src for s in ("0x1DD9C611", "69.99125", "0x80000000u", "bsxBuf.u32(130)", "0x0081")))
 
 print("[container round-trip (ported writer)]")
 INV = 1.0 / 69.99125
