@@ -30,6 +30,13 @@
 #include "WriteBackProcessor.h"
 #include "WeatherEditor.h"
 #include "EditorIDCache.h"
+#include "KreateProfile.h"
+#include "SBConfig.h"
+#include "WorldspaceWeatherlist.h"
+#include "SkyLighting.h"
+#include "EnbLightInventoryFix.h"
+#include "EngineReflect.h"
+#include "EngineFixes.h"
 
 // GPU tier
 #include "D3D11Hook.h"
@@ -103,6 +110,32 @@ static void LoadGPUConfig(const std::filesystem::path& configDir)
         if (key == "EnableGPUTier")           s_gpuConfig.enableGPUTier = truthy(val);
         else if (key == "EnableAtmosphere")   s_gpuConfig.enableAtmosphere = truthy(val);
         else if (key == "EnableVolumetricClouds") s_gpuConfig.enableVolumetricClouds = truthy(val);
+    }
+}
+
+// ── Native replacement suite (config/SkyrimBridge.ini [Native]) ─────────────
+// Toggles for the components that replace the third-party ENB plugins. The
+// weatherlist router and Sky model default on; the AE-only inventory-light
+// fix defaults off (validate in-game before dropping the third-party DLL).
+struct NativeConfig
+{
+    bool weatherRouting = true;
+    bool sky = true;
+    bool enbLightInventoryFix = false;
+    bool engineFixes = true;    // recovered AE spin-lock patch; validated before write
+};
+static NativeConfig s_native;
+
+static void LoadNativeConfig(const std::filesystem::path& configDir)
+{
+    bool found = false;
+    auto doc = SB::Cfg::ParseFile(configDir / "SkyrimBridge.ini", &found);
+    if (!found) return;
+    if (auto* s = doc.Find("Native")) {
+        s_native.weatherRouting       = s->Bool("WeatherRouting", s_native.weatherRouting);
+        s_native.sky                  = s->Bool("Sky", s_native.sky);
+        s_native.enbLightInventoryFix = s->Bool("EnbLightInventoryFix", s_native.enbLightInventoryFix);
+        s_native.engineFixes          = s->Bool("EngineFixes", s_native.engineFixes);
     }
 }
 
@@ -313,6 +346,19 @@ static void DoFrameUpdate()
         SKSE::log::error("SkyrimBridge: WeatherEditor threw");
     }
 
+    // 7. Native plugin replacements: per-worldspace ENB weatherlist routing
+    //    and the celestial lighting model.
+    try {
+        SB::WorldspaceWeatherlist::Get().Update();
+    } catch (...) {
+        SKSE::log::error("SkyrimBridge: WorldspaceWeatherlist threw");
+    }
+    try {
+        SB::SkyLighting::Get().Update();
+    } catch (...) {
+        SKSE::log::error("SkyrimBridge: SkyLighting threw");
+    }
+
     ++s_frameCount;
 }
 
@@ -383,10 +429,19 @@ static void OnMessage(SKSE::MessagingInterface::Message* a_msg)
 {
     switch (a_msg->type) {
     case SKSE::MessagingInterface::kPostLoad:
+    {
         // Editor-ID cache hooks must install before data loading begins so
         // the weather workshop can name forms (presets are keyed by EditorID).
+        // This natively replaces the third-party NativeEditorID fix.
         SB::EditorIDCache::Get().Install();
+
+        // Native ENB Light Inventory Fix installs its engine hooks here,
+        // before any menu can render a 3D item preview. Opt-in + AE-only.
+        LoadNativeConfig(std::filesystem::path("Data/SKSE/Plugins/SkyrimBridge"));
+        if (s_native.enbLightInventoryFix)
+            SB::EnbLightInventoryFix::Get().Install();
         break;
+    }
 
     case SKSE::MessagingInterface::kPostPostLoad:
         // ENB (d3d11.dll) is loaded by now if it is present at all.
@@ -431,6 +486,45 @@ static void OnMessage(SKSE::MessagingInterface::Message* a_msg)
         SB::WeatherEditor::Get().SetPresetDir(configDir / "WeatherPresets");
         SKSE::log::info("SkyrimBridge: weather workshop ready "
             "(presets in SkyrimBridge/WeatherPresets, hot-reload live)");
+
+        // KreatE image-space overlay loader: applies the per-FormID image
+        // space grading that ships in a KreatE profile. Root is configurable;
+        // the default matches the Elder ENB layout.
+        {
+            std::filesystem::path kreateRoot("KreatE/Presets");
+            std::ifstream kcfg(configDir / "KreateRoot.txt");
+            if (kcfg) {
+                std::string line;
+                if (std::getline(kcfg, line) && !line.empty())
+                    kreateRoot = std::filesystem::path(line);
+            }
+            SB::KreateProfile::Get().SetProfileRoot(kreateRoot);
+            auto profiles = SB::KreateProfile::Get().ListProfiles();
+            SKSE::log::info("SkyrimBridge: KreatE loader ready — {} profiles under '{}'",
+                profiles.size(), kreateRoot.string());
+        }
+
+        // ── Native ENB plugin replacements ───────────────────────────────
+        // Per-worldspace ENB weatherlist routing (enbseries/ lives next to the
+        // game exe) and the celestial lighting model. Both read SkyrimBridge's
+        // own flat-INI configs, not the third-party plugins' formats.
+        if (s_native.weatherRouting) {
+            std::error_code wec;
+            auto root = std::filesystem::current_path(wec);
+            if (!wec)
+                SB::WorldspaceWeatherlist::Get().Initialize(root / "enbseries");
+        }
+        if (s_native.sky)
+            SB::SkyLighting::Get().Initialize(configDir);
+
+        // EngineReflect: register the record schemas (read/write/translate/verify
+        // spine). Built on CommonLibSSE-NG RE:: layouts, the reversal substrate.
+        SB::Reflect::RegisterBuiltins();
+
+        // EngineFixes: recovered binary patches, applied to the live (decrypted)
+        // engine via the Address Library. Validated before each write.
+        if (s_native.engineFixes)
+            SB::EngineFixes::Get().Install();
 
         // ── GPU tier ─────────────────────────────────────────────────────
         LoadGPUConfig(configDir);

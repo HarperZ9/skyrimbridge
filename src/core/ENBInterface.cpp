@@ -76,6 +76,9 @@ namespace ENBInterface
         GetGameIdentifier = reinterpret_cast<_ENBGetGameIdentifier>(
             GetProcAddress(enbModule, "ENBGetGameIdentifier"));
 
+        DirtyHack = reinterpret_cast<_ENBDirtyHack>(
+            GetProcAddress(enbModule, "DirtyHack"));
+
         if (!SetCallbackFunction || !SetParameter) {
             SKSE::log::error("SkyrimBridge: Failed to resolve ENB SDK functions");
             return false;
@@ -195,5 +198,13 @@ namespace ENBInterface
             SKSE::log::info("SkyrimBridge: push #{} — {}/{} params dirty",
                 s_pushCount, dirtyCount, SB::kParamCount);
         }
+    }
+
+    bool ReloadConfig()
+    {
+        if (!DirtyHack)
+            return false;
+        DirtyHack(3);   // selector 3 = reload config from disk
+        return true;
     }
 }

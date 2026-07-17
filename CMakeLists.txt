@@ -34,6 +34,20 @@ add_commonlibsse_plugin(
         src/core/WriteBackProcessor.cpp
         src/core/WeatherEditor.cpp
         src/core/EditorIDCache.cpp
+        src/core/KreateProfile.cpp
+        src/core/KreateRecords.cpp
+
+        # Native replacements for the third-party ENB plugin suite
+        src/core/WorldspaceWeatherlist.cpp
+        src/core/SkyLighting.cpp
+        src/core/EnbLightInventoryFix.cpp
+
+        # Engine-exposure spine + recovered binary patches
+        src/core/EngineReflect.cpp
+        src/core/EngineFixes.cpp
+
+        # Native foreign-format texture codec (non-.dds asset integration)
+        src/core/TextureCodec.cpp
 
         # Core trackers (domains 1-10)
         src/core/CelestialTracker.cpp
@@ -119,6 +133,15 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/config/GPU.ini"
         "$<TARGET_FILE_DIR:${PROJECT_NAME}>/config/GPU.ini"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/config/SkyrimBridge.ini"
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/config/SkyrimBridge.ini"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/config/Sky.ini"
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/config/Sky.ini"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/config/WeatherRouting.example.ini"
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/config/WeatherRouting.example.ini"
     COMMENT "Copying config files to build directory"
 )
 

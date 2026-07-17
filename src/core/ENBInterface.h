@@ -88,6 +88,10 @@ namespace ENBInterface
     using _ENBGetState            = long(__stdcall*)(ENBStateType);
     using _ENBGetRenderInfo       = ENBRenderInfo*(__stdcall*)();
     using _ENBGetGameIdentifier   = long(__stdcall*)();
+    // Undocumented: DirtyHack(3) reloads the ENB config from disk. Confirmed
+    // exported by the ENB d3d11.dll; resolved by name at runtime. Version-
+    // fragile, so calls are guarded on the pointer being non-null.
+    using _ENBDirtyHack           = void(__stdcall*)(long);
 
     // ── Resolved function pointers ───────────────────────────────────────
     // Populated by Init(); valid for the process lifetime afterwards.
@@ -99,6 +103,11 @@ namespace ENBInterface
     inline _ENBGetState            GetState            = nullptr;
     inline _ENBGetRenderInfo       GetRenderInfo       = nullptr;
     inline _ENBGetGameIdentifier   GetGameIdentifier   = nullptr;
+    inline _ENBDirtyHack           DirtyHack           = nullptr;
+
+    // Ask ENB to reload its config from disk (DirtyHack selector 3).
+    // No-op when the export is unavailable. Returns whether it fired.
+    bool ReloadConfig();
 
     // ── Lifecycle ────────────────────────────────────────────────────────
 

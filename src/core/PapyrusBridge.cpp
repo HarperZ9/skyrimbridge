@@ -20,9 +20,16 @@
 #include "PapyrusBridge.h"
 #include "BridgeData.h"
 #include "WeatherEditor.h"
+#include "KreateProfile.h"
+#include "EngineReflect.h"
+#include "TextureCodec.h"
 #include <RE/Skyrim.h>
 #include <SKSE/SKSE.h>
 #include <cstring>
+#include <cstdio>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 
 namespace SB::PapyrusBridge
 {
@@ -146,6 +153,93 @@ namespace SB::PapyrusBridge
         WeatherEditor::Get().ClearForcedWeather();
     }
 
+    // ── KreatE profile natives (the menu surface) ────────────────────────
+    // Console: cgf "SkyrimBridge.LoadKreateProfile" "Arrival of Autumn"
+
+    static int32_t LoadKreateProfile(RE::StaticFunctionTag*, RE::BSFixedString a_name)
+    {
+        return KreateProfile::Get().LoadAndApply(a_name.c_str());
+    }
+
+    static int32_t KreateProfileCount(RE::StaticFunctionTag*)
+    {
+        return static_cast<int32_t>(KreateProfile::Get().ListProfiles().size());
+    }
+
+    static RE::BSFixedString KreateProfileNameAt(RE::StaticFunctionTag*, int32_t a_index)
+    {
+        auto names = KreateProfile::Get().ListProfiles();
+        if (a_index < 0 || a_index >= static_cast<int32_t>(names.size()))
+            return RE::BSFixedString("");
+        return RE::BSFixedString(names[a_index].c_str());
+    }
+
+    static RE::BSFixedString ActiveKreateProfile(RE::StaticFunctionTag*)
+    {
+        return RE::BSFixedString(KreateProfile::Get().LoadedName().c_str());
+    }
+
+    // ── EngineReflect natives (generic record read/write/verify) ─────────
+    // In-game loop:  SkyrimBridge.EngineReflectDump 0x<formid>  (writes an INI
+    //   under SkyrimBridge/dumps), edit it, then EngineReflectApply 0x<formid>.
+    //   EngineReflectVerify witnesses a lossless serialize round-trip.
+
+    static const char* kReflectDumpDir = "Data/SKSE/Plugins/SkyrimBridge/dumps";
+
+    static RE::BSFixedString EngineReflectDump(RE::StaticFunctionTag*, int32_t a_formID)
+    {
+        auto text = Reflect::Dump(static_cast<RE::FormID>(a_formID));
+        if (text.empty()) {
+            SKSE::log::warn("EngineReflect: 0x{:08X} has no schema or does not resolve", a_formID);
+            return RE::BSFixedString("");
+        }
+        std::error_code ec;
+        std::filesystem::create_directories(kReflectDumpDir, ec);
+        char name[80];
+        std::snprintf(name, sizeof name, "%s/%08X.ini", kReflectDumpDir, a_formID);
+        std::ofstream out(name);
+        if (out) out << text;
+        SKSE::log::info("EngineReflect: dumped 0x{:08X} -> {}", a_formID, name);
+        return RE::BSFixedString(name);
+    }
+
+    static int32_t EngineReflectApply(RE::StaticFunctionTag*, int32_t a_formID)
+    {
+        char name[80];
+        std::snprintf(name, sizeof name, "%s/%08X.ini", kReflectDumpDir, a_formID);
+        std::ifstream in(name);
+        if (!in) {
+            SKSE::log::warn("EngineReflect: no dump at {}", name);
+            return 0;
+        }
+        std::stringstream b; b << in.rdbuf();
+        int n = Reflect::Apply(static_cast<RE::FormID>(a_formID), b.str());
+        SKSE::log::info("EngineReflect: applied {} fields to 0x{:08X}", n, a_formID);
+        return n;
+    }
+
+    static int32_t EngineReflectVerify(RE::StaticFunctionTag*, int32_t a_formID)
+    {
+        auto r = Reflect::Verify(static_cast<RE::FormID>(a_formID));
+        if (r.ok)
+            SKSE::log::info("EngineReflect: 0x{:08X} verified lossless ({} fields)", a_formID, r.fields);
+        else
+            SKSE::log::warn("EngineReflect: 0x{:08X} verify FAILED: {}", a_formID, r.detail);
+        return r.ok ? r.fields : 0;
+    }
+
+    // ── Texture codec native (non-.dds asset integration) ────────────────
+    // cgf "SkyrimBridge.ConvertTexture" "in.tga" "out.dds"  (paths game-relative
+    // or absolute). Decodes TGA/BMP and writes an uncompressed DDS the engine
+    // accepts. PNG is not yet supported (needs an inflate stage).
+
+    static bool ConvertTexture(RE::StaticFunctionTag*, RE::BSFixedString a_in, RE::BSFixedString a_out)
+    {
+        bool ok = TexCodec::ConvertToDDS(a_in.c_str(), a_out.c_str());
+        SKSE::log::info("TextureCodec: {} -> {} : {}", a_in.c_str(), a_out.c_str(), ok ? "ok" : "failed");
+        return ok;
+    }
+
     // ── Registration ─────────────────────────────────────────────────────
 
     bool Register()
@@ -173,7 +267,18 @@ namespace SB::PapyrusBridge
         vm->RegisterFunction("ForceWeatherByID",   "SkyrimBridge", ForceWeatherByID);
         vm->RegisterFunction("ClearForcedWeather", "SkyrimBridge", ClearForcedWeather);
 
-        SKSE::log::info("PapyrusBridge: registered 15 native functions under 'SkyrimBridge'");
+        vm->RegisterFunction("LoadKreateProfile",   "SkyrimBridge", LoadKreateProfile);
+        vm->RegisterFunction("KreateProfileCount",  "SkyrimBridge", KreateProfileCount);
+        vm->RegisterFunction("KreateProfileNameAt", "SkyrimBridge", KreateProfileNameAt);
+        vm->RegisterFunction("ActiveKreateProfile", "SkyrimBridge", ActiveKreateProfile);
+
+        vm->RegisterFunction("EngineReflectDump",   "SkyrimBridge", EngineReflectDump);
+        vm->RegisterFunction("EngineReflectApply",  "SkyrimBridge", EngineReflectApply);
+        vm->RegisterFunction("EngineReflectVerify", "SkyrimBridge", EngineReflectVerify);
+
+        vm->RegisterFunction("ConvertTexture",      "SkyrimBridge", ConvertTexture);
+
+        SKSE::log::info("PapyrusBridge: registered 23 native functions under 'SkyrimBridge'");
         return true;
     }
 }
