@@ -333,6 +333,11 @@ confidence are labeled honestly.
     (may need a post-`Sky::Update` write; that hook is the remaining RE).
 13. In-game-validate and then default-enable `EnbLightInventoryFix` and
     `[Sky] Enable` once the operator confirms the look/behavior. (operator-gated)
+    The acceptance procedure is delivered: `docs/VALIDATION-PROTOCOL.md` has
+    exact toggles, log lines, steps, and pass criteria for all six
+    OFF-by-default features, plus `tools/sb_command_client.py` (a zero-compile
+    Python client) so the command channel is testable without a C++ toolchain.
+    Every default stays OFF until the operator flips it.
 
 ---
 
