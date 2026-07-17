@@ -306,6 +306,28 @@ change and diff the two reports. Differences in shadow-light counts, ref
 counts, VM queue depth, and load times per stop are the regression signal
 this tool exists to surface.
 
+## 12. Collision material (snow footsteps), per-op
+
+Depends on section 7/11 (a spawned mesh with collision). Convert or spawn
+with a material and confirm the engine reacts to it.
+
+**Steps:** spawn a walkable mesh with collision and a snow material. Over
+the channel: `python tools\sb_command_client.py model.spawn Data/test.obj --int 131330`
+(argInt = collision bit 2 | 1 piece <<8 = 0x102 | snow index 2 <<16 =
+0x20000, i.e. 131330). Or in-game after converting a file:
+`cgf "SkyrimBridge.ConvertModelEx" "Data/x.obj" "Data/x.nif" false true 4 "snow"`.
+Sanity-check the hash first: `cgf "SkyrimBridge.MaterialHash" "snow"` should
+return 398949039 (0x17C77AAF).
+
+**Pass:** walking on the spawned mesh produces SNOW footstep sounds (not the
+wood default), and weapon/arrow hits show snow impact effects. Compare
+against a wood-default spawn to hear the difference.
+
+**Honest null to remember:** this changes the sound and impact the engine
+reacts to. Visual footprint depressions in snow are a separate system (the
+snow shader / a footprints mod), not the collision material, so their
+absence is not a failure of this feature.
+
 ---
 
 ## After a PASS

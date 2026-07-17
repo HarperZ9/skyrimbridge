@@ -29,5 +29,5 @@ namespace SB::ModelSpawn
     // a .nif copies as-is).
     std::uint32_t SpawnAtPlayer(const std::filesystem::path& in, std::string& err,
                                 bool treeMode = false, bool collision = false,
-                                int collisionPieces = 1);
+                                int collisionPieces = 1, std::uint32_t collisionMaterial = 0);
 }

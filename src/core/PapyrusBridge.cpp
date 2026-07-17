@@ -29,6 +29,7 @@
 #include "ModelSpawn.h"
 #include "CellReport.h"
 #include "ScriptReport.h"
+#include "CollisionMaterial.h"
 #include <RE/Skyrim.h>
 #include <SKSE/SKSE.h>
 #include <cstring>
@@ -435,18 +436,30 @@ namespace SB::PapyrusBridge
     }
 
     // a_collisionPieces: 0/1 = single convex hull, >=2 = decomposed
-    // bhkListShape (concave-approximating). Walk-testing is the oracle.
+    // bhkListShape (concave-approximating). a_material: SkyrimHavokMaterial
+    // name (snow/stone/wood/ice/...; empty = wood default) driving footstep
+    // and impact feel. Walk-testing is the oracle.
     static bool ConvertModelEx(RE::StaticFunctionTag*, RE::BSFixedString a_in, RE::BSFixedString a_out,
-                               bool a_tree, bool a_collision, std::int32_t a_collisionPieces)
+                               bool a_tree, bool a_collision, std::int32_t a_collisionPieces,
+                               RE::BSFixedString a_material)
     {
         const int pieces = a_collisionPieces < 1 ? 1 : (a_collisionPieces > 32 ? 32 : a_collisionPieces);
-        bool ok = ModelCodec::ConvertToNIF(a_in.c_str(), a_out.c_str(), a_tree, a_collision, pieces);
-        SKSE::log::info("ModelCodec: {} -> {} [{}{}] : {}", a_in.c_str(), a_out.c_str(),
+        const std::uint32_t mat = a_material.empty() ? 0u : CollisionMaterial::ByName(a_material.c_str());
+        bool ok = ModelCodec::ConvertToNIF(a_in.c_str(), a_out.c_str(), a_tree, a_collision, pieces, mat);
+        SKSE::log::info("ModelCodec: {} -> {} [{}{}{}] : {}", a_in.c_str(), a_out.c_str(),
                         a_tree ? "tree" : "static",
                         a_collision ? (pieces >= 2 ? "+collision x" + std::to_string(pieces) : "+collision")
                                     : "",
+                        (a_collision && !a_material.empty()) ? " " + std::string(a_material.c_str()) : "",
                         ok ? "ok" : "failed");
         return ok;
+    }
+
+    // cgf "SkyrimBridge.MaterialHash" "snow"  — resolve a SkyrimHavokMaterial
+    // name to its hash (introspection; 0 = unknown name).
+    static std::int32_t MaterialHash(RE::StaticFunctionTag*, RE::BSFixedString a_name)
+    {
+        return static_cast<std::int32_t>(CollisionMaterial::ByName(a_name.c_str()));
     }
 
     // cgf "SkyrimBridge.SpawnModel" "in.obj"  — the pragmatic runtime-model
@@ -559,8 +572,9 @@ namespace SB::PapyrusBridge
         vm->RegisterFunction("ScriptReport",           "SkyrimBridge", ScriptReportNative);
         vm->RegisterFunction("FormChain",              "SkyrimBridge", FormChain);
         vm->RegisterFunction("TextureInfo",            "SkyrimBridge", TextureInfo);
+        vm->RegisterFunction("MaterialHash",           "SkyrimBridge", MaterialHash);
 
-        SKSE::log::info("PapyrusBridge: registered 39 native functions under 'SkyrimBridge'");
+        SKSE::log::info("PapyrusBridge: registered 40 native functions under 'SkyrimBridge'");
         return true;
     }
 }

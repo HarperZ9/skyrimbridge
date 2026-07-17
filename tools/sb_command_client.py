@@ -22,8 +22,12 @@ Usage:
   python sb_command_client.py model.convert in.obj out.nif    (--int bits: 1 tree, 2 collision)
   python sb_command_client.py model.spawn in.obj      (places at player; MUTATES the
                                                        save; --int bits: 1 tree, 2 collision;
-                                                       high byte = collision piece count, e.g.
-                                                       2 | 8<<8 = 2050 for 8-piece decomposition)
+                                                       bits 8-15 = collision piece count;
+                                                       bits 16-23 = material index
+                                                       (0 wood,1 stone,2 snow,3 ice,4 dirt,
+                                                        5 grass,6 gravel,7 sand,8 metal,...).
+                                                       e.g. 2 | 8<<8 | 2<<16 = 133122:
+                                                       8-piece snow collision)
 
 Dispatch happens one request per frame on the game thread: if the game is
 paused (menus, console open), the response waits until it unpauses.

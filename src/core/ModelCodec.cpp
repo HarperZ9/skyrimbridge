@@ -147,9 +147,12 @@ namespace SB::ModelCodec
 
     // ── NIF writer ───────────────────────────────────────────────────────
     std::vector<std::uint8_t> WriteNIF(const Mesh& mesh, bool treeMode, bool collision,
-                                       int collisionPieces)
+                                       int collisionPieces, std::uint32_t collisionMaterial)
     {
         Mesh m = mesh;
+        // 0 = the shipped default (WOOD, 0x1DD9C611). That hash is
+        // SKY_HAV_MAT_WOOD, not stone (an earlier comment mislabeled it).
+        const std::uint32_t collMat = collisionMaterial ? collisionMaterial : 0x1DD9C611u;
         FinalizeMesh(m);
         const std::size_t nv = m.positions.size();
         const std::size_t nt = m.indices.size() / 3;
@@ -327,7 +330,7 @@ namespace SB::ModelCodec
             constexpr float kInvHavokScale = 1.0f / 69.99125f;
             for (auto& piece : pieces) {
                 Buf cb;
-                cb.u32(0x1DD9C611);                          // material: SKY_HAV_MAT_STONE
+                cb.u32(collMat);                             // SkyrimHavokMaterial (footstep/impact feel)
                 cb.f32(0.05f);                               // convex radius
                 for (int k = 0; k < 2; ++k) { cb.u32(0); cb.u32(0); cb.u32(0x80000000u); }
                 cb.u32(static_cast<std::uint32_t>(piece.verts.size()));
@@ -346,7 +349,7 @@ namespace SB::ModelCodec
             if (useList) {                                   // bhkListShape wrapping the pieces
                 listBuf.u32(static_cast<std::uint32_t>(nPieces));
                 for (int i = 0; i < nPieces; ++i) listBuf.i32(convexBase + i);
-                listBuf.u32(0x1DD9C611);                     // material
+                listBuf.u32(collMat);                        // material
                 for (int k = 0; k < 2; ++k) { listBuf.u32(0); listBuf.u32(0); listBuf.u32(0x80000000u); }
                 listBuf.u32(static_cast<std::uint32_t>(nPieces));   // numInts == numSubShapes
                 for (int i = 0; i < nPieces; ++i) listBuf.u32(0);   // per-child filters
@@ -769,11 +772,12 @@ namespace SB::ModelCodec
     }
 
     bool ConvertToNIF(const std::filesystem::path& in, const std::filesystem::path& out,
-                      bool treeMode, bool collision, int collisionPieces)
+                      bool treeMode, bool collision, int collisionPieces,
+                      std::uint32_t collisionMaterial)
     {
         Mesh m = LoadFile(in);
         if (!m.valid) return false;
-        auto bytes = WriteNIF(m, treeMode, collision, collisionPieces);
+        auto bytes = WriteNIF(m, treeMode, collision, collisionPieces, collisionMaterial);
         if (bytes.empty()) return false;
         std::ofstream f(out, std::ios::binary | std::ios::trunc);
         if (!f) return false;

@@ -168,6 +168,12 @@ cgf "SkyrimBridge.TextureScanNow" true                      ; dry-run the tree s
   against known-by-construction files: PIL PNG (independent writer), legacy
   DXT5 and DX10 BC7 DDS containers, TGA, BMP, and an unknown-content
   refusal.
+- `tests/validate_collision_material.py` — 9 checks. The shipped material
+  table parsed from CollisionMaterial.cpp and compared to the authoritative
+  niftools nif.xml enum (locks 0x1DD9C611 as WOOD, not the earlier STONE
+  mislabel; STONE 0xDF02F237, SNOW 0x17C77AAF distinct), plus material
+  propagation into an emitted list+convex chain (snow reaches the list shape
+  and every convex child).
 - `tests/validate_convex_decompose.py` — 18 checks. The decomposer on a
   concave L-solid (union covers every input point with no gaps; phantom
   notch collision cut 0.44 -> 0.08 vs a single hull; full true-solid
@@ -255,6 +261,16 @@ cut phantom notch collision from 0.44 to 0.08. Exact concave (mesh) collision
 needs MOPP, which is Havok-SDK bytecode and stays out of scope. Walk-testing
 is the acceptance oracle.
 
+The collision **material** (footstep sounds, weapon/arrow impact effects) is
+selectable: `snow`, `stone`, `wood` (default), `ice`, `dirt`, `grass`,
+`gravel`, `sand`, `metal`, `glass`, `mud`, `bone`, the stairs variants, and
+more, resolved to the verified SkyrimHavokMaterial hashes in
+`CollisionMaterial.cpp` (e.g. snow `0x17C77AAF`, stone `0xDF02F237`, wood
+`0x1DD9C611`). The material is written to both the list shape and every
+convex child. Honest null: this drives the sound/impact the engine reacts
+to; visual snow FOOTPRINT depressions are a separate shader/footprint
+system, not the collision material.
+
 Honest nulls: no skinned/animated meshes, first primitive/group only, no
 concave/MOPP mesh collision, no Draco/sparse glTF; a spawned mesh's material
 is only as good as what the source carried (an untextured OBJ renders flat);
@@ -323,7 +339,8 @@ Console form: `cgf "SkyrimBridge.<name>" <args...>`
 |---|---|
 | ConvertModel | `bool (string in, string out)` — OBJ/glTF/GLB in, NIF out |
 | ConvertModelTree | `bool (string in, string out)` — tree mode: wind vertex colors + Tree_Anim + BSLeafAnimNode root |
-| ConvertModelEx | `bool (string in, string out, bool tree, bool collision, int pieces)` — pieces >= 2 = decomposed bhkListShape collision |
+| ConvertModelEx | `bool (string in, string out, bool tree, bool collision, int pieces, string material)` — pieces >= 2 = decomposed bhkListShape; material = SkyrimHavokMaterial name (snow/stone/wood/ice/...) |
+| MaterialHash | `int (string name)` — resolve a SkyrimHavokMaterial name to its hash (0 = unknown) |
 | SpawnModel | `int (string in)` — convert + place at the player via the engine loader; returns the ref's FormID (MUTATES the save) |
 
 **Diagnostics**

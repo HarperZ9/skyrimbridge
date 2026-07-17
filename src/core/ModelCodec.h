@@ -71,12 +71,17 @@ namespace SB::ModelCodec
     // hull cannot. Degenerate pieces are dropped; no valid piece -> no
     // collision. Walk-testing is the acceptance oracle (concave/MOPP mesh
     // collision stays out of scope; the MOPP bytecode is Havok-SDK-bound).
+    // collisionMaterial (0 = the shipped WOOD default) is the
+    // SkyrimHavokMaterial hash driving footstep/impact feel (see
+    // CollisionMaterial.h; e.g. snow, stone, ice).
     std::vector<std::uint8_t> WriteNIF(const Mesh& m, bool treeMode = false,
-                                       bool collision = false, int collisionPieces = 1);
+                                       bool collision = false, int collisionPieces = 1,
+                                       std::uint32_t collisionMaterial = 0);
 
     // Convenience: any supported input -> .nif on disk.
     bool ConvertToNIF(const std::filesystem::path& in, const std::filesystem::path& out,
-                      bool treeMode = false, bool collision = false, int collisionPieces = 1);
+                      bool treeMode = false, bool collision = false, int collisionPieces = 1,
+                      std::uint32_t collisionMaterial = 0);
 
     // Half-float codec (exposed for the offline validator).
     std::uint16_t FloatToHalf(float f);

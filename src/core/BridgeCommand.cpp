@@ -11,6 +11,7 @@
 #include "TextureAutoConvert.h"
 #include "ModelCodec.h"
 #include "ModelSpawn.h"
+#include "CollisionMaterial.h"
 #include "CellReport.h"
 #include "ScriptReport.h"
 
@@ -243,19 +244,22 @@ namespace SB
                 SetText(b, msg);
                 return kCmdOK;
             }
-            // argInt bits: 1 = tree, 2 = collision; high byte (>>8) = collision
-            // piece count (0/1 = single hull, >=2 = decomposed bhkListShape).
+            // argInt bits: 1 = tree, 2 = collision; bits 8-15 = collision
+            // piece count (0/1 = single hull, >=2 = decomposed bhkListShape);
+            // bits 16-23 = collision material index (CollisionMaterial order).
             if (verb == "model.convert") {
                 int pieces = (b->argInt >> 8) & 0xFF; if (pieces < 1) pieces = 1;
+                std::uint32_t mat = CollisionMaterial::ByIndex((b->argInt >> 16) & 0xFF);
                 b->resultInt = ModelCodec::ConvertToNIF(b->arg0, b->arg1,
-                                                        (b->argInt & 1) != 0, (b->argInt & 2) != 0, pieces) ? 1 : 0;
+                                                        (b->argInt & 1) != 0, (b->argInt & 2) != 0, pieces, mat) ? 1 : 0;
                 return b->resultInt ? kCmdOK : kCmdFailed;
             }
             if (verb == "model.spawn") {           // MUTATES the save (per-op)
                 int pieces = (b->argInt >> 8) & 0xFF; if (pieces < 1) pieces = 1;
+                std::uint32_t mat = CollisionMaterial::ByIndex((b->argInt >> 16) & 0xFF);
                 std::string err;
                 auto id = ModelSpawn::SpawnAtPlayer(b->arg0, err, (b->argInt & 1) != 0,
-                                                    (b->argInt & 2) != 0, pieces);
+                                                    (b->argInt & 2) != 0, pieces, mat);
                 b->resultInt = static_cast<std::int32_t>(id);
                 if (id) {
                     char msg[48];
