@@ -67,6 +67,10 @@ namespace SB
     //   reflect.dump   arg0 = "0x<formid>"         -> resultText = INI, resultInt = fields
     //   reflect.apply  arg0 = "0x<formid>", resultText(in) = INI  -> resultInt = fields written
     //   reflect.verify arg0 = "0x<formid>", argInt = 1 -> strict  -> resultInt = fields (0 = fail)
+    //   reflect.chain  arg0 = "0x<formid>" -> resultText = plugin override
+    //                  chain, oldest first, winner last ("which mod won")
+    //   texture.info   arg0 = path -> resultText = header-only description
+    //                  (container, format, dimensions, mips / depth / bpp)
     //   cell.report    (no args) -> resultText = performance census of the
     //                  player's cell (shadow lights, refs by type/plugin);
     //                  full text in dumps/cellreport.txt

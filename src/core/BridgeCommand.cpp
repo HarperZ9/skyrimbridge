@@ -141,6 +141,18 @@ namespace SB
                 SetText(b, r.ok ? "ok" : r.detail);
                 return r.ok ? kCmdOK : kCmdFailed;
             }
+            if (verb == "reflect.chain") {       // plugin override chain of any form
+                auto text = Reflect::SourceChain(ArgFormID(b->arg0));
+                if (text.empty()) return kCmdNotFound;
+                SetText(b, text);
+                return kCmdOK;
+            }
+            if (verb == "texture.info") {        // header-only texture inspection
+                auto text = TexCodec::Describe(b->arg0);
+                if (text.empty()) return kCmdNotFound;
+                SetText(b, text);
+                return kCmdOK;
+            }
             if (verb == "region.dump") {
                 std::uint32_t id = ArgFormID(b->arg0);
                 auto text = RegionWalker::Dump(id);

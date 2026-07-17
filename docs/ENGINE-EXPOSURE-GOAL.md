@@ -456,6 +456,18 @@ category table: `docs/PAIN-POINTS-ASSESSMENT-2026-07.md`. Build order:
     (protocol section 10); coc targets vary by modlist. "Did my modlist
     change break anything" is now a scripted tour with evidence.
     **Lane G fully dispatched (G20-G22).**
+23. ~~Utility pass~~ DONE 2026-07-17, three composable gaps closed in one
+    sweep: **LandTexture schema** (13th, 14 fields incl. the GNAM grass
+    list as bounded slots Grass0..Grass7, existing-entries-only writes;
+    closes the grass loop opened by GRAS; 813 fields total).
+    **FormChain** native (38th) + `reflect.chain` verb: the plugin override
+    chain of ANY form, oldest first, winner last, scriptable ("which mod
+    won this record"; the console UI tools only answer for a selected
+    reference). **TextureInfo** native (39th) + `texture.info` verb:
+    header-only texture inspection (container, format, dims, mips), the
+    first question of every texture-pipeline debugging session;
+    offline-proven by `tests/validate_texture_info.py`, 6/6. FormChain and
+    the schema are engine-bound reads, compile-verified as always.
 
 **Lane E: close the honest nulls already on record.**
 12. ~~Reverse `AELAS.dll`'s hooks / sun repositioning~~ DONE 2026-07-16 in two

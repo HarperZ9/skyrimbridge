@@ -88,6 +88,11 @@ namespace SB::Reflect
     std::string ListSchemas();                          // one line per schema: name, form type, field count
     std::string DescribeSchema(const Schema& s);        // field name + kind, one per line
 
+    // The form's plugin override chain, oldest first, winner last ("which
+    // mod won this record", scriptable, for ANY form). "" if the form does
+    // not exist; runtime-created forms are named as such.
+    std::string SourceChain(RE::FormID id);
+
     // ── High level (FormID driven) ───────────────────────────────────────
     std::string Dump(RE::FormID id);                    // "" if no schema/form
     int         Apply(RE::FormID id, const std::string& text);

@@ -702,6 +702,58 @@ namespace SB::TexCodec
         return info;
     }
 
+    std::string Describe(const std::filesystem::path& path)
+    {
+        std::ifstream in(path, std::ios::binary | std::ios::ate);
+        if (!in) return {};
+        const auto fileSize = static_cast<long long>(in.tellg());
+        in.seekg(0);
+        std::uint8_t h[256] = {};
+        in.read(reinterpret_cast<char*>(h), sizeof h);
+        const auto got = static_cast<std::size_t>(in.gcount());
+
+        char line[160];
+        switch (DetectFormat(h, got)) {
+        case Format::DDS: {
+            auto info = ReadDDSHeader(h, got);
+            if (!info.valid) return {};
+            std::snprintf(line, sizeof line, "DDS %s %ux%u mips=%u (%lld bytes)",
+                          info.format.c_str(), info.width, info.height,
+                          info.mipCount ? info.mipCount : 1, fileSize);
+            return line;
+        }
+        case Format::PNG: {
+            if (got < 33) return {};
+            std::snprintf(line, sizeof line,
+                          "PNG %ux%u depth=%u colorType=%u interlace=%u (%lld bytes)",
+                          (h[16] << 24) | (h[17] << 16) | (h[18] << 8) | h[19],
+                          (h[20] << 24) | (h[21] << 16) | (h[22] << 8) | h[23],
+                          h[24], h[25], h[28], fileSize);
+            return line;
+        }
+        case Format::BMP: {
+            if (got < 30) return {};
+            std::snprintf(line, sizeof line, "BMP %dx%d %ubpp (%lld bytes)",
+                          static_cast<std::int32_t>(rd32(h + 18)),
+                          static_cast<std::int32_t>(rd32(h + 22)),
+                          rd16(h + 28), fileSize);
+            return line;
+        }
+        default:
+            break;
+        }
+        // TGA is headerless: trust the extension, then sanity-check fields.
+        if (DetectFromPath(path.string()) == Format::TGA && got >= 18) {
+            const std::uint8_t type = h[2], bpp = h[16];
+            if ((type == 2 || type == 10) && (bpp == 24 || bpp == 32)) {
+                std::snprintf(line, sizeof line, "TGA type=%u %ubpp %ux%u (%lld bytes)",
+                              type, bpp, rd16(h + 12), rd16(h + 14), fileSize);
+                return line;
+            }
+        }
+        return {};
+    }
+
     // Clamp-edge 2x2 box filter, one mip level down (round to nearest).
     static Image HalveBox(const Image& src)
     {

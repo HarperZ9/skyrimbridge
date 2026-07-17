@@ -71,6 +71,11 @@ namespace SB::TexCodec
 
     DDSInfo ReadDDSHeader(const std::uint8_t* data, std::size_t len);
 
+    // One-line description of a texture file, header-only (no full decode):
+    // container, format, dimensions, mips (DDS) or depth/color type (PNG) or
+    // bpp (TGA/BMP), plus the file size. "" = unreadable/unknown.
+    std::string Describe(const std::filesystem::path& path);
+
     // Encode an RGBA image as a DDS in the given format. With mipmaps, a
     // clamp-edge 2x2 box-filter chain down to 1x1 is appended and the header
     // carries the mip count. BC1 writes opaque color (no 1-bit alpha mode);

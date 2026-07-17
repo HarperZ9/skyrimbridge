@@ -12,6 +12,8 @@ Usage:
   python sb_command_client.py reflect.dump 0x10A241
   python sb_command_client.py reflect.apply 0x10A241        (edits dumps/<id>.ini first)
   python sb_command_client.py reflect.verify 0x10A241        (--int 1 = strict, MUTATES)
+  python sb_command_client.py reflect.chain 0x10A241          (override chain, winner last)
+  python sb_command_client.py texture.info textures/foo.dds   (format/dims/mips, header-only)
   python sb_command_client.py region.dump 0x<region>
   python sb_command_client.py region.weather 0x<region> 0x<weather> --int <chance>
   python sb_command_client.py texture.convert in.png out.dds --int 2   (0/1/2/3 = RGBA8/BC1/BC3/BC7)

@@ -405,6 +405,35 @@ namespace SB::PapyrusBridge
         return true;
     }
 
+    // cgf "SkyrimBridge.FormChain" 0x10A241  — the form's plugin override
+    // chain, oldest first, winner last: "which mod won this record",
+    // scriptable and for ANY form (the console UI tools only answer for a
+    // selected reference).
+    static RE::BSFixedString FormChain(RE::StaticFunctionTag*, std::int32_t a_formID)
+    {
+        auto text = Reflect::SourceChain(static_cast<RE::FormID>(a_formID));
+        if (text.empty()) {
+            SKSE::log::warn("FormChain: no form 0x{:08X}", static_cast<std::uint32_t>(a_formID));
+            return "";
+        }
+        SKSE::log::info("FormChain: {}", text);
+        return text.c_str();
+    }
+
+    // cgf "SkyrimBridge.TextureInfo" "textures/foo.dds"  — header-only
+    // texture inspection: container, format, dimensions, mips. The first
+    // question of every texture-pipeline debugging session.
+    static RE::BSFixedString TextureInfo(RE::StaticFunctionTag*, RE::BSFixedString a_path)
+    {
+        auto text = TexCodec::Describe(a_path.c_str());
+        if (text.empty()) {
+            SKSE::log::warn("TextureInfo: unreadable or unknown format: {}", a_path.c_str());
+            return "";
+        }
+        SKSE::log::info("TextureInfo: {}: {}", a_path.c_str(), text);
+        return text.c_str();
+    }
+
     static bool ConvertModelEx(RE::StaticFunctionTag*, RE::BSFixedString a_in, RE::BSFixedString a_out,
                                bool a_tree, bool a_collision)
     {
@@ -523,8 +552,10 @@ namespace SB::PapyrusBridge
         vm->RegisterFunction("SpawnModel",             "SkyrimBridge", SpawnModel);
         vm->RegisterFunction("CellReport",             "SkyrimBridge", CellReportNative);
         vm->RegisterFunction("ScriptReport",           "SkyrimBridge", ScriptReportNative);
+        vm->RegisterFunction("FormChain",              "SkyrimBridge", FormChain);
+        vm->RegisterFunction("TextureInfo",            "SkyrimBridge", TextureInfo);
 
-        SKSE::log::info("PapyrusBridge: registered 37 native functions under 'SkyrimBridge'");
+        SKSE::log::info("PapyrusBridge: registered 39 native functions under 'SkyrimBridge'");
         return true;
     }
 }

@@ -641,6 +641,46 @@ namespace SB::Reflect
             RF_S(TESWorldSpace, "WaterEnvMap", waterEnvMap.textureName),
         }});
 
+        // Land texture (LTEX): closes the grass loop the Grass schema opened:
+        // WHICH grasses grow on which ground texture. The GNAM grass list is
+        // exposed as bounded slots Grass0..Grass7: reads past the list end
+        // return 0; writes replace EXISTING entries only (no list surgery),
+        // the RegionWalker discipline; writing 0 is a no-op, never a removal.
+        {
+            Schema s{ "LandTexture", RE::TESLandTexture::FORMTYPE, {
+                RF_LINK(TESLandTexture, "TextureSet", textureSet, BGSTextureSet),
+                RF_LINK(TESLandTexture, "MaterialType", materialType, BGSMaterialType),
+                RF_INT(TESLandTexture, "Friction", havokData.friction, std::int32_t),
+                RF_INT(TESLandTexture, "Restitution", havokData.restitution, std::int32_t),
+                RF_INT(TESLandTexture, "SpecularExponent", specularExponent, std::int8_t),
+                RF_INT(TESLandTexture, "ShaderTextureIndex", shaderTextureIndex, std::int32_t),
+            }};
+            for (int slot = 0; slot < 8; ++slot) {
+                s.fields.push_back(Field{ "Grass" + std::to_string(slot), Value::Kind::FormLink,
+                    [slot](const RE::TESForm* f) {
+                        // read-only walk; non-const iteration only because this
+                        // CommonLib's BSSimpleList const_iterator does not convert
+                        auto* lt = const_cast<RE::TESLandTexture*>(
+                            static_cast<const RE::TESLandTexture*>(f));
+                        int i = 0;
+                        for (auto* g : lt->textureGrassList)
+                            if (i++ == slot) return Value::Link(g ? g->GetFormID() : 0);
+                        return Value::Link(0);
+                    },
+                    [slot](RE::TESForm* f, const Value& v) {
+                        if (!v.id) return;               // no clearing, no surgery
+                        auto* g = RE::TESForm::LookupByID<RE::TESGrass>(v.id);
+                        if (!g) return;
+                        auto* lt = static_cast<RE::TESLandTexture*>(f);
+                        int i = 0;
+                        for (auto it = lt->textureGrassList.begin();
+                             it != lt->textureGrassList.end(); ++it, ++i)
+                            if (i == slot) { *it = g; return; }
+                    } });
+            }
+            R.push_back(std::move(s));
+        }
+
         // Grass (GRAS): the full typed DATA block plus the model path. The
         // engine clamps some of these itself (density/slopes 0..100/90); the
         // schema exposes the raw stored values, and the engine's own setters
@@ -661,6 +701,26 @@ namespace SB::Reflect
         }});
 
         SKSE::log::info("EngineReflect: {} schemas registered", R.size());
+    }
+
+    std::string SourceChain(RE::FormID id)
+    {
+        auto* form = RE::TESForm::LookupByID(id);
+        if (!form) return {};
+        char head[64];
+        std::snprintf(head, sizeof head, "0x%08X (%s): ", id,
+                      std::string(RE::FormTypeToString(form->GetFormType())).c_str());
+        std::string out = head;
+        const auto* arr = form->sourceFiles.array;
+        if (!arr || arr->empty())
+            return out + "(runtime-created; no plugin chain)";
+        for (std::uint32_t i = 0; i < arr->size(); ++i) {
+            if (i) out += " -> ";
+            const auto* f = (*arr)[i];
+            out += f ? std::string(f->GetFilename()) : "?";
+        }
+        out += "   [last = winner]";
+        return out;
     }
 
     // ── Discovery ────────────────────────────────────────────────────────

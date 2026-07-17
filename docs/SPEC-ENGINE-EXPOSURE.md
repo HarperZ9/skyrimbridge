@@ -30,7 +30,7 @@ Value kinds: `float`, `int`, `bool`, `color3`, `color4`, `formlink`, `string`.
 Form links resolve through `TESForm::LookupByID` on write; an unresolvable ID
 is a no-op, never a wild pointer.
 
-### Registered schemas (799 fields total)
+### Registered schemas (813 fields total)
 
 | Schema | Form type | Fields | Covers / notable exclusions |
 |---|---|---|---|
@@ -45,7 +45,8 @@ is a no-op, never a wild pointer.
 | EffectShader | EFSH | 95 | fill/edge/particle/color keys/holes/addon + textures + links; membrane and particle blend modes excluded (D3DBLEND is only forward-declared in CommonLib) |
 | ImageSpaceModifier | IMAD | 41 | duration + HDR/cinematic mult-add pairs first-class; fields CommonLib types as raw `uint32` (tint, blurs, DoF) exposed as raw Ints, suffixed `Raw`, never lossy-decoded |
 | WorldSpace | WRLD | 31 | climate/water/lighting/music links, map framing, land/water heights, textures; runtime containers (cell maps) excluded by design |
-| Grass | GRAS | 11 | model path + full DATA block: density, slopes, water distance/state, position/height/color ranges, wave period, flags. Placement (which land textures grow it) lives on TESLandTexture, not GRAS |
+| Grass | GRAS | 11 | model path + full DATA block: density, slopes, water distance/state, position/height/color ranges, wave period, flags. Placement (which land textures grow it) lives on LandTexture |
+| LandTexture | LTEX | 14 | texture set/material links, havok friction/restitution, specular, shader index, and the GNAM grass list as bounded slots Grass0..Grass7 (writes replace existing entries only; writing 0 is a no-op, no list surgery). Closes the grass loop with GRAS |
 
 Adding a record type is one schema block using the field macros
 (`RF_F`, `RF_INT`, `RF_B`, `RF_FLAGS`, `RF_S`, `RF_LINK`, `RF_C3F`, `RF_C3B`)
@@ -163,6 +164,10 @@ cgf "SkyrimBridge.TextureScanNow" true                      ; dry-run the tree s
   hand-built blocks (every mode) and real modlist DXT1/DXT5 textures; encode
   output decodes identically under PIL and our model; PSNR floor; lossless
   round-trip on exactly-representable blocks; TGA layout via PIL read-back.
+- `tests/validate_texture_info.py` — 6 checks. The header-only inspector
+  against known-by-construction files: PIL PNG (independent writer), legacy
+  DXT5 and DX10 BC7 DDS containers, TGA, BMP, and an unknown-content
+  refusal.
 - `tests/validate_collision_gen.py` — 19 checks. Quickhull held to the hull
   properties directly (containment, subset, unit planes, face support,
   volume, exact cube/octahedron answers, determinism, degenerate refusals);
@@ -245,7 +250,7 @@ whether a STAT-placed reference sways (vs needing a TREE form) is game-bound.
 
 ---
 
-## 5. Native API reference (37 natives, script name `SkyrimBridge`)
+## 5. Native API reference (39 natives, script name `SkyrimBridge`)
 
 Console form: `cgf "SkyrimBridge.<name>" <args...>`
 
@@ -314,6 +319,8 @@ Console form: `cgf "SkyrimBridge.<name>" <args...>`
 |---|---|
 | CellReport | `int (())` — read-only census of the player's cell: refs by type, shadow-casting lights (nearest first, plugin-attributed), refs per winning plugin; full text to `dumps/cellreport.txt`; returns the shadow-light count |
 | ScriptReport | `bool (())` — live Papyrus VM monitor: overstress flag, function-message queue depth, running/latent/frozen stacks, executing script classes, per-class instance census; runs next frame (a native must not take the VM's locks); full text to `dumps/scriptreport.txt` |
+| FormChain | `string (int formID)` — the form's plugin override chain, oldest first, winner last ("which mod won", scriptable, any form) |
+| TextureInfo | `string (string path)` — header-only texture inspection: container, format, dimensions, mips / depth / bpp |
 
 ---
 
@@ -365,6 +372,8 @@ the mailbox carries the trigger and a bounded 4 KiB text result.
 | `reflect.dump` | `arg0` = `"0x<formid>"` | INI text (also written to `dumps/<id>.ini`), `resultInt` = lines |
 | `reflect.apply` | `arg0` = `"0x<formid>"`; client edits `dumps/<id>.ini` first | `resultInt` = fields written |
 | `reflect.verify` | `arg0` = `"0x<formid>"`, `argInt` = 1 for strict (MUTATES) | `resultInt` = fields, 0 on failure |
+| `reflect.chain` | `arg0` = `"0x<formid>"` | plugin override chain, oldest first, winner last |
+| `texture.info` | `arg0` = path | header-only texture description |
 | `region.dump` | `arg0` = `"0x<region>"` | subrecord dump (also `dumps/<id>.region.ini`) |
 | `cell.report` | — | performance census of the player's cell (shadow lights, refs by type/plugin); full text in `dumps/cellreport.txt` |
 | `script.report` | — | live Papyrus VM monitor (overstress, queue depth, stacks, class census); full text in `dumps/scriptreport.txt` |
