@@ -196,6 +196,16 @@ then discard the save.
 **Record:** whether the shape appears at all (loader accepted our NIF), scale
 and orientation sanity, and any crash on `markfordelete` or cell reload.
 
+**Blender addon path (same feature, the QoL front end):** install
+`tools/blender/skyrimbridge_push.py` (Edit > Preferences > Add-ons >
+Install...), enable it, open the View3D sidebar (N) > SkyrimBridge. With the
+game running (CommandSurface on, save loaded, unpaused) select a mesh and
+click "Push to Game". Expected: the panel reports `<name>: placed 0x...`, the
+same `ModelSpawn:` log line appears, and the mesh stands at the player.
+Orientation is part of the claim: the addon exports Z-up specifically so the
+model arrives upright; a mesh lying on its side is a FAIL (record it). Same
+save rules as above: disposable save, `markfordelete` to clean up.
+
 ---
 
 ## After a PASS

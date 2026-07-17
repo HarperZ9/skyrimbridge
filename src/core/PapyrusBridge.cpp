@@ -26,6 +26,7 @@
 #include "TextureCodec.h"
 #include "TextureAutoConvert.h"
 #include "ModelCodec.h"
+#include "ModelSpawn.h"
 #include <RE/Skyrim.h>
 #include <SKSE/SKSE.h>
 #include <cstring>
@@ -367,50 +368,8 @@ namespace SB::PapyrusBridge
     // remove with the console (click the ref, "markfordelete").
     static std::int32_t SpawnModel(RE::StaticFunctionTag*, RE::BSFixedString a_in)
     {
-        auto* player = RE::PlayerCharacter::GetSingleton();
-        if (!player || !player->Is3DLoaded()) {
-            SKSE::log::warn("SpawnModel: needs a loaded player (in-game only)");
-            return 0;
-        }
-
-        std::filesystem::path in(a_in.c_str());
-        std::error_code ec;
-        std::filesystem::create_directories("Data/meshes/SkyrimBridge/spawn", ec);
-        const std::string stem = in.stem().string();
-        const std::filesystem::path out =
-            std::filesystem::path("Data/meshes/SkyrimBridge/spawn") / (stem + ".nif");
-
-        bool ok;
-        if (_stricmp(in.extension().string().c_str(), ".nif") == 0) {
-            std::filesystem::copy_file(in, out, std::filesystem::copy_options::overwrite_existing, ec);
-            ok = !ec;
-        } else {
-            ok = ModelCodec::ConvertToNIF(in, out);
-        }
-        if (!ok) {
-            SKSE::log::warn("SpawnModel: could not materialize {} -> {}", in.string(), out.string());
-            return 0;
-        }
-
-        RE::TESObjectSTAT* stat = nullptr;
-        if (auto* factory = RE::IFormFactory::GetFormFactoryByType(RE::FormType::Static))
-            if (auto* form = factory->Create())
-                stat = form->As<RE::TESObjectSTAT>();
-        if (!stat) {
-            SKSE::log::warn("SpawnModel: Static form factory unavailable");
-            return 0;
-        }
-        const std::string rel = "SkyrimBridge\\spawn\\" + stem + ".nif";
-        stat->SetModel(rel.c_str());
-
-        auto ref = player->PlaceObjectAtMe(stat, false);
-        if (!ref) {
-            SKSE::log::warn("SpawnModel: PlaceObjectAtMe failed for {}", rel);
-            return 0;
-        }
-        SKSE::log::info("SpawnModel: {} -> meshes\\{} : placed 0x{:08X} (dynamic STAT 0x{:08X})",
-                        in.string(), rel, ref->GetFormID(), stat->GetFormID());
-        return static_cast<std::int32_t>(ref->GetFormID());
+        std::string err;
+        return static_cast<std::int32_t>(ModelSpawn::SpawnAtPlayer(a_in.c_str(), err));
     }
 
     static bool ConvertTextureFmt(RE::StaticFunctionTag*, RE::BSFixedString a_in,

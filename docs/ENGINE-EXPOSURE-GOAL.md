@@ -319,8 +319,9 @@ confidence are labeled honestly.
     channel. A second shared-memory region (`SkyrimBridge_Command`, layout in
     `src/SB_CommandLayout.h`, plugin side `src/core/BridgeCommand.{h,cpp}`,
     header-only client `tools/SkyrimBridgeClient.h`) drives EngineReflect,
-    RegionWalker, TextureCodec, and ModelCodec from an external tool. Ten
-    verbs, single-slot sequence-gated protocol, one request per frame,
+    RegionWalker, TextureCodec, and ModelCodec from an external tool. Eleven
+    verbs (model.spawn joined 2026-07-16 late for the Blender addon),
+    single-slot sequence-gated protocol, one request per frame,
     SEH-isolated dispatch. `[Native] CommandSurface`, ships OFF. Offline-proven
     (`tests/validate_command_protocol.py`, 15 checks: ctypes ABI mirror +
     200-round sequence-gated round-trip). Game-bound: live dispatch through a
@@ -330,6 +331,32 @@ confidence are labeled honestly.
     matrix, model codec, all 31 natives with signatures + console forms, config
     grammar, the command channel + verb table, validation receipts). Keep it in
     the same commit as any surface change. **Lane D is COMPLETE.**
+
+**Lane F: creator QoL pipeline (opened 2026-07-16 late, operator-directed).**
+The thesis: Blender and the paint tools are the front end, the running game is
+the preview window; SkyrimBridge's command channel is the transport. Wedge
+order agreed with the operator:
+14. ~~Blender push-to-game addon~~ DONE 2026-07-16 late:
+    `tools/blender/skyrimbridge_push.py` (single file, install from
+    Preferences > Add-ons). One button in the 3D-view sidebar: exports the
+    selection as GLB (Z-up, since ModelCodec passes glTF coordinates through
+    unchanged into NIF space) and sends `model.spawn` over the mailbox; the
+    engine's own loader places the mesh at the player in seconds. The verb
+    rides the new shared `ModelSpawn` core (same code as the SpawnModel
+    native). Offline-proven: `tests/validate_blender_addon.py`, 12/12
+    (protocol layer standalone against a simulated dispatcher on a test-named
+    mapping; caught and fixed the int32 FormID bit-pattern crossing for
+    0xFFxxxxxx dynamic forms). Game-bound: protocol section 7. MUTATES the
+    save per spawn; conversion runs on the game's frame thread (a very large
+    mesh hitches for the convert's duration).
+15. Alpha-coverage-preserving mipmaps for foliage (offline-provable). (open)
+16. Tree wind vertex-color auto-painting + Tree shader type in ModelCodec;
+    verify the channel-to-sway mapping against a vanilla tree NIF offline
+    first. (open)
+17. TESGrass/GRAS schema in EngineReflect (one block). (open)
+18. Convex-hull collision investigation (bhkConvexVerticesShape, MOPP-free;
+    confidence moderate until checked against real NIFs). (open, scoped
+    investigation before any code)
 
 **Lane E: close the honest nulls already on record.**
 12. ~~Reverse `AELAS.dll`'s hooks / sun repositioning~~ DONE 2026-07-16 in two

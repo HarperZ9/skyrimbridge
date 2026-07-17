@@ -276,8 +276,11 @@ is needed.
 ## 7. External command channel (`[Native] CommandSurface`, ships OFF)
 
 `src/SB_CommandLayout.h` (the ABI contract, dependency-free; include it from
-any client) + `src/core/BridgeCommand.{h,cpp}` (plugin side) +
-`tools/SkyrimBridgeClient.h` (a header-only C++ client). A second shared-memory
+any client) + `src/core/BridgeCommand.{h,cpp}` (plugin side). Clients:
+`tools/SkyrimBridgeClient.h` (header-only C++),
+`tools/sb_command_client.py` (zero-compile CLI), and
+`tools/blender/skyrimbridge_push.py` (Blender push-to-game addon: export the
+selection, `model.spawn`, see it at the player). A second shared-memory
 region, `SkyrimBridge_Command`, alongside the one-way game-state region, so an
 external tool drives the engine surface without the in-game console.
 
@@ -310,6 +313,7 @@ the mailbox carries the trigger and a bounded 4 KiB text result.
 | `texture.convert` | `arg0` = in, `arg1` = out, `argInt` = 0/1/2/3 (RGBA8/BC1/BC3/BC7) | `resultInt` = ok |
 | `texture.scan` | `argInt` = 1 dry / 0 live | `resultInt` = converted, counts in text |
 | `model.convert` | `arg0` = in, `arg1` = out | `resultInt` = ok |
+| `model.spawn` | `arg0` = in (foreign mesh or .nif) | `resultInt` = placed ref FormID as an int32 bit pattern (0xFFxxxxxx arrives negative; mask with 0xFFFFFFFF). MUTATES the save |
 
 Validation receipt: `tests/validate_command_protocol.py` (15 checks) verifies
 the 5184-byte ABI layout field-for-field against a Python `ctypes` mirror and

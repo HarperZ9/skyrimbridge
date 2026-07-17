@@ -17,6 +17,7 @@ Usage:
   python sb_command_client.py texture.convert in.png out.dds --int 2   (0/1/2/3 = RGBA8/BC1/BC3/BC7)
   python sb_command_client.py texture.scan --int 1                     (1 dry, 0 live)
   python sb_command_client.py model.convert in.obj out.nif
+  python sb_command_client.py model.spawn in.obj      (places at player; MUTATES the save)
 
 Dispatch happens one request per frame on the game thread: if the game is
 paused (menus, console open), the response waits until it unpauses.
@@ -82,8 +83,10 @@ def main():
 
     status = i32(m, OFF_STATUS)
     text = m[OFF_TEXT:OFF_TEXT + 4096].split(b"\0", 1)[0].decode(errors="replace")
+    res = i32(m, OFF_RESINT)
     print(f"status    {status} ({STATUS.get(status, '?')})")
-    print(f"resultInt {i32(m, OFF_RESINT)}")
+    # hex shows the u32 bit pattern: FormIDs (model.spawn) are 0xFFxxxxxx
+    print(f"resultInt {res} (0x{res & 0xFFFFFFFF:08X})")
     if text:
         print(text)
     sys.exit(0 if status == 0 else 2)

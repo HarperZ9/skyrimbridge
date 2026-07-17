@@ -72,6 +72,8 @@ namespace SB
     //   texture.convert arg0 = in, arg1 = out, argInt = 0|1|2|3 (RGBA8|BC1|BC3|BC7) -> resultInt = ok
     //   texture.scan   argInt = 1 (dry) | 0 (live) -> resultInt = converted
     //   model.convert  arg0 = in, arg1 = out       -> resultInt = ok
+    //   model.spawn    arg0 = in (foreign mesh or .nif) -> resultInt = placed
+    //                  reference FormID (0 = failed). MUTATES the save.
 
     #pragma pack(pop)
 }

@@ -10,6 +10,7 @@
 #include "TextureCodec.h"
 #include "TextureAutoConvert.h"
 #include "ModelCodec.h"
+#include "ModelSpawn.h"
 
 #include <RE/Skyrim.h>
 #include <SKSE/SKSE.h>
@@ -170,6 +171,19 @@ namespace SB
             if (verb == "model.convert") {
                 b->resultInt = ModelCodec::ConvertToNIF(b->arg0, b->arg1) ? 1 : 0;
                 return b->resultInt ? kCmdOK : kCmdFailed;
+            }
+            if (verb == "model.spawn") {           // MUTATES the save (per-op)
+                std::string err;
+                auto id = ModelSpawn::SpawnAtPlayer(b->arg0, err);
+                b->resultInt = static_cast<std::int32_t>(id);
+                if (id) {
+                    char msg[48];
+                    std::snprintf(msg, sizeof msg, "placed 0x%08X", id);
+                    SetText(b, msg);
+                    return kCmdOK;
+                }
+                SetText(b, err);
+                return kCmdFailed;
             }
             return kCmdUnknownVerb;
         }
