@@ -39,6 +39,10 @@ namespace SB
                 else                    m_format = 2;
                 m_mipmaps = s->Bool("Mipmaps", m_mipmaps);
                 m_refresh = s->Bool("Refresh", m_refresh);
+                if (s->Bool("CoverageMips", false)) {
+                    int t = Cfg::AsInt(s->Get("CoverageThreshold", "128"), 128);
+                    m_coverage = t < 1 ? 1 : (t > 255 ? 255 : t);
+                }
                 auto root = s->Get("Root");
                 if (!root.empty()) m_root = root;
             }
@@ -94,7 +98,7 @@ namespace SB
             if (dryRun) { ++r.converted; continue; }
 
             try {
-                if (TexCodec::Convert(it->path(), target, fmt, m_mipmaps)) {
+                if (TexCodec::Convert(it->path(), target, fmt, m_mipmaps, m_coverage)) {
                     ++r.converted;
                     SKSE::log::info("TextureAutoConvert: {} -> {}",
                                     it->path().filename().string(), target.filename().string());

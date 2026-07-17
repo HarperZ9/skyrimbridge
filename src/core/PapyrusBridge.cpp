@@ -388,6 +388,31 @@ namespace SB::PapyrusBridge
         return ok;
     }
 
+    // cgf "SkyrimBridge.ConvertTextureFoliage" "in.png" "out.dds" "BC3" 128
+    // Alpha-coverage-preserving mipmaps for alpha-tested foliage: plain
+    // box-filter mips dilute alpha every level, so leaves and grass thin out
+    // and vanish at distance. Here each generated mip's alpha is rescaled so
+    // the fraction of texels passing the alpha test stays at the top level's
+    // coverage. threshold <= 0 uses 128 (the usual NiAlphaProperty cutoff).
+    static bool ConvertTextureFoliage(RE::StaticFunctionTag*, RE::BSFixedString a_in,
+                                      RE::BSFixedString a_out, RE::BSFixedString a_fmt,
+                                      std::int32_t a_threshold)
+    {
+        auto fmt = TexCodec::DDSFormat::BC3;
+        if (_stricmp(a_fmt.c_str(), "BC7") == 0)        fmt = TexCodec::DDSFormat::BC7;
+        else if (_stricmp(a_fmt.c_str(), "RGBA8") == 0) fmt = TexCodec::DDSFormat::RGBA8;
+        else if (_stricmp(a_fmt.c_str(), "BC3") != 0) {
+            SKSE::log::warn("TextureCodec: foliage format '{}' (BC3/BC7/RGBA8; BC1 carries no alpha)",
+                            a_fmt.c_str());
+            return false;
+        }
+        int t = a_threshold <= 0 ? 128 : (a_threshold > 255 ? 255 : a_threshold);
+        bool ok = TexCodec::Convert(a_in.c_str(), a_out.c_str(), fmt, true, t);
+        SKSE::log::info("TextureCodec: {} -> {} [{} coverage@{}] : {}",
+                        a_in.c_str(), a_out.c_str(), a_fmt.c_str(), t, ok ? "ok" : "failed");
+        return ok;
+    }
+
     // ── Registration ─────────────────────────────────────────────────────
 
     bool Register()
@@ -430,13 +455,14 @@ namespace SB::PapyrusBridge
         vm->RegisterFunction("RegionSetWeatherChance", "SkyrimBridge", RegionSetWeatherChance);
         vm->RegisterFunction("RegionApply",            "SkyrimBridge", RegionApply);
 
-        vm->RegisterFunction("ConvertTexture",      "SkyrimBridge", ConvertTexture);
-        vm->RegisterFunction("ConvertTextureFmt",   "SkyrimBridge", ConvertTextureFmt);
-        vm->RegisterFunction("TextureScanNow",      "SkyrimBridge", TextureScanNow);
-        vm->RegisterFunction("ConvertModel",        "SkyrimBridge", ConvertModel);
-        vm->RegisterFunction("SpawnModel",          "SkyrimBridge", SpawnModel);
+        vm->RegisterFunction("ConvertTexture",         "SkyrimBridge", ConvertTexture);
+        vm->RegisterFunction("ConvertTextureFmt",      "SkyrimBridge", ConvertTextureFmt);
+        vm->RegisterFunction("ConvertTextureFoliage",  "SkyrimBridge", ConvertTextureFoliage);
+        vm->RegisterFunction("TextureScanNow",         "SkyrimBridge", TextureScanNow);
+        vm->RegisterFunction("ConvertModel",           "SkyrimBridge", ConvertModel);
+        vm->RegisterFunction("SpawnModel",             "SkyrimBridge", SpawnModel);
 
-        SKSE::log::info("PapyrusBridge: registered 32 native functions under 'SkyrimBridge'");
+        SKSE::log::info("PapyrusBridge: registered 33 native functions under 'SkyrimBridge'");
         return true;
     }
 }

@@ -159,6 +159,16 @@ namespace SB
                 b->resultInt = TexCodec::Convert(b->arg0, b->arg1, fmt) ? 1 : 0;
                 return b->resultInt ? kCmdOK : kCmdFailed;
             }
+            if (verb == "texture.foliage") {     // coverage-preserving mips
+                const int f = b->argInt & 0xFF;  // same format map as texture.convert
+                auto fmt = f == 1 ? TexCodec::DDSFormat::BC1
+                         : f == 3 ? TexCodec::DDSFormat::BC7
+                         : f == 0 ? TexCodec::DDSFormat::RGBA8 : TexCodec::DDSFormat::BC3;
+                int t = (b->argInt >> 8) & 0xFF;
+                if (t == 0) t = 128;
+                b->resultInt = TexCodec::Convert(b->arg0, b->arg1, fmt, true, t) ? 1 : 0;
+                return b->resultInt ? kCmdOK : kCmdFailed;
+            }
             if (verb == "texture.scan") {
                 auto r = TextureAutoConvert::Get().RunScan(b->argInt != 0);
                 b->resultInt = static_cast<std::int32_t>(r.converted);

@@ -33,6 +33,7 @@ namespace SB
         std::unordered_map<std::string, std::string>  s_redirect;   // lower rel .dds -> cache rel ("" = negative)
         int                                           s_format = 2; // 0=RGBA8 1=BC1 2=BC3
         bool                                          s_mips = true;
+        int                                           s_coverage = -1;  // alpha-test threshold, -1 = off
         std::atomic<std::uint32_t>                    s_served{ 0 };
 
         std::string Lower(const char* p)
@@ -100,7 +101,7 @@ namespace SB
                                        : s_format == 1 ? TexCodec::DDSFormat::BC1
                                        : s_format == 3 ? TexCodec::DDSFormat::BC7
                                                        : TexCodec::DDSFormat::BC3;
-                        if (!TexCodec::Convert(src, cacheAbs, fmt, s_mips)) {
+                        if (!TexCodec::Convert(src, cacheAbs, fmt, s_mips, s_coverage)) {
                             SKSE::log::warn("TextureLoadHook: transcode failed for {}", src.string());
                             continue;
                         }
@@ -204,6 +205,10 @@ namespace SB
                 else if (fmt == "BC7") s_format = 3;
                 else                   s_format = 2;
                 s_mips = s->Bool("Mipmaps", s_mips);
+                if (s->Bool("CoverageMips", false)) {
+                    int t = Cfg::AsInt(s->Get("CoverageThreshold", "128"), 128);
+                    s_coverage = t < 1 ? 1 : (t > 255 ? 255 : t);
+                }
             }
         }
 

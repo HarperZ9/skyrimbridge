@@ -726,7 +726,48 @@ namespace SB::TexCodec
         return m;
     }
 
-    std::vector<std::uint8_t> EncodeDDS(const Image& img, DDSFormat fmt, bool mipmaps)
+    // Fraction of texels passing the alpha test (alpha >= threshold).
+    static double AlphaCoverage(const Image& img, int threshold)
+    {
+        const std::size_t n = static_cast<std::size_t>(img.width) * img.height;
+        std::size_t hit = 0;
+        for (std::size_t i = 0; i < n; ++i)
+            if (img.rgba[i * 4 + 3] >= threshold) ++hit;
+        return n ? static_cast<double>(hit) / static_cast<double>(n) : 0.0;
+    }
+
+    // Rescale a mip's alpha so its test coverage matches the top level's
+    // (the standard alpha-mipmap method). Coverage is a monotonic step
+    // function of the scale, so bisect for the smallest scale that reaches
+    // the target: within quantization the result errs thick, which is the
+    // point for foliage.
+    static void ScaleAlphaToCoverage(Image& img, double target, int threshold)
+    {
+        const std::size_t n = static_cast<std::size_t>(img.width) * img.height;
+        if (!n || target <= 0.0) return;
+        auto coverageAt = [&](double s) {
+            std::size_t hit = 0;
+            for (std::size_t i = 0; i < n; ++i) {
+                int a = static_cast<int>(img.rgba[i * 4 + 3] * s + 0.5);
+                if ((a > 255 ? 255 : a) >= threshold) ++hit;
+            }
+            return static_cast<double>(hit) / static_cast<double>(n);
+        };
+        double lo = 0.0, hi = 8.0;
+        if (coverageAt(hi) < target) { lo = hi; }        // unreachable target: cap
+        for (int i = 0; i < 24 && lo < hi; ++i) {
+            double mid = 0.5 * (lo + hi);
+            if (coverageAt(mid) >= target) hi = mid; else lo = mid;
+        }
+        const double s = hi;
+        for (std::size_t i = 0; i < n; ++i) {
+            int a = static_cast<int>(img.rgba[i * 4 + 3] * s + 0.5);
+            img.rgba[i * 4 + 3] = static_cast<std::uint8_t>(a > 255 ? 255 : a);
+        }
+    }
+
+    std::vector<std::uint8_t> EncodeDDS(const Image& img, DDSFormat fmt, bool mipmaps,
+                                        int coverageThreshold)
     {
         std::vector<std::uint8_t> out;
         if (!img.valid || img.rgba.size() != static_cast<std::size_t>(img.width) * img.height * 4) return out;
@@ -783,6 +824,12 @@ namespace SB::TexCodec
             wr32(out, 0);                                // miscFlags2 (alpha mode unknown)
         }
 
+        // Coverage preservation: the top level defines the target; every
+        // generated mip is rescaled to it. Meaningless for BC1 (no alpha).
+        const bool coverage = coverageThreshold >= 1 && coverageThreshold <= 255 &&
+                              fmt != DDSFormat::BC1;
+        const double targetCov = coverage ? AlphaCoverage(img, coverageThreshold) : 0.0;
+
         Image level = img;
         for (std::uint32_t i = 0; ; ++i) {
             if (bc) {
@@ -793,6 +840,8 @@ namespace SB::TexCodec
             }
             if (i + 1 >= levels) break;
             level = HalveBox(level);
+            if (coverage)
+                ScaleAlphaToCoverage(level, targetCov, coverageThreshold);
         }
         return out;
     }
@@ -802,9 +851,10 @@ namespace SB::TexCodec
         return EncodeDDS(img, DDSFormat::RGBA8, mipmaps);
     }
 
-    bool WriteDDS(const std::filesystem::path& out, const Image& img, bool mipmaps, DDSFormat fmt)
+    bool WriteDDS(const std::filesystem::path& out, const Image& img, bool mipmaps, DDSFormat fmt,
+                  int coverageThreshold)
     {
-        auto bytes = EncodeDDS(img, fmt, mipmaps);
+        auto bytes = EncodeDDS(img, fmt, mipmaps, coverageThreshold);
         if (bytes.empty()) return false;
         std::ofstream f(out, std::ios::binary | std::ios::trunc);
         if (!f) return false;
@@ -840,13 +890,13 @@ namespace SB::TexCodec
     }
 
     bool Convert(const std::filesystem::path& in, const std::filesystem::path& out,
-                 DDSFormat fmt, bool mipmaps)
+                 DDSFormat fmt, bool mipmaps, int coverageThreshold)
     {
         Image img = DecodeFile(in);
         if (!img.valid) return false;
         Format target = DetectFromPath(out.string());
         if (target == Format::TGA) return WriteTGA(out, img);
-        if (target == Format::DDS) return WriteDDS(out, img, mipmaps, fmt);
+        if (target == Format::DDS) return WriteDDS(out, img, mipmaps, fmt, coverageThreshold);
         return false;                                     // PNG/BMP write: honest null
     }
 }

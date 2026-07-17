@@ -127,6 +127,12 @@ and `(a+b)/2` color interpolation, truncating `/7` and `/5` alpha ramps.
 cgf "SkyrimBridge.ConvertTexture" "in.png" "out.dds"        ; by output extension
 cgf "SkyrimBridge.ConvertTexture" "in.dds" "out.tga"        ; DDS -> editable lane
 cgf "SkyrimBridge.ConvertTextureFmt" "in.png" "out.dds" "BC3"  ; BC1 | BC3 | BC7 | RGBA8
+cgf "SkyrimBridge.ConvertTextureFoliage" "in.png" "out.dds" "BC3" 128
+;   coverage-preserving mips for alpha-tested foliage: each mip's alpha is
+;   rescaled so the fraction of texels passing the alpha test stays at the
+;   top level's coverage (box-filter mips otherwise thin leaves/grass to
+;   nothing at distance). threshold <= 0 -> 128. Also available to the
+;   background converters: [TextureConvert] CoverageMips / CoverageThreshold.
 cgf "SkyrimBridge.TextureScanNow" true                      ; dry-run the tree scan
 ```
 
@@ -156,6 +162,12 @@ cgf "SkyrimBridge.TextureScanNow" true                      ; dry-run the tree s
   hand-built blocks (every mode) and real modlist DXT1/DXT5 textures; encode
   output decodes identically under PIL and our model; PSNR floor; lossless
   round-trip on exactly-representable blocks; TGA layout via PIL read-back.
+- `tests/validate_foliage_mips.py` — 10 checks. Demonstrates the defect first
+  (box-filter mips collapse a sparse synthetic foliage's alpha-test coverage
+  to 0.000, and real modlist foliage decays measurably), then proves the fix:
+  every mip holds the top level's coverage within quantization tolerance,
+  never thinner, deterministic, opaque/transparent edge cases pass through,
+  and the property survives BC3 alpha quantization (the shipping format).
 - `tests/validate_bc7_codec.py` — 92 checks. The partition/anchor tables are
   parsed out of the shipped TextureBC7.cpp at run time, so the compiled data
   is what gets verified. Per-mode random-block fuzz (all 8 modes) byte-exact
@@ -200,7 +212,7 @@ is only as good as what the source carried (an untextured OBJ renders flat).
 
 ---
 
-## 5. Native API reference (32 natives, script name `SkyrimBridge`)
+## 5. Native API reference (33 natives, script name `SkyrimBridge`)
 
 Console form: `cgf "SkyrimBridge.<name>" <args...>`
 
@@ -253,6 +265,7 @@ Console form: `cgf "SkyrimBridge.<name>" <args...>`
 |---|---|
 | ConvertTexture | `bool (string in, string out)` |
 | ConvertTextureFmt | `bool (string in, string out, string fmt)` |
+| ConvertTextureFoliage | `bool (string in, string out, string fmt, int threshold)` — coverage-preserving mips (BC3/BC7/RGBA8) |
 | TextureScanNow | `int (bool dryRun)` — converted (or would-convert) count |
 
 **ModelCodec**
@@ -311,6 +324,7 @@ the mailbox carries the trigger and a bounded 4 KiB text result.
 | `region.dump` | `arg0` = `"0x<region>"` | subrecord dump (also `dumps/<id>.region.ini`) |
 | `region.weather` | `arg0` = region, `arg1` = weather, `argInt` = chance | `resultInt` = entries edited |
 | `texture.convert` | `arg0` = in, `arg1` = out, `argInt` = 0/1/2/3 (RGBA8/BC1/BC3/BC7) | `resultInt` = ok |
+| `texture.foliage` | `arg0` = in, `arg1` = out, `argInt` = fmt \| (threshold << 8), threshold 0 -> 128 | coverage-preserving mips; `resultInt` = ok |
 | `texture.scan` | `argInt` = 1 dry / 0 live | `resultInt` = converted, counts in text |
 | `model.convert` | `arg0` = in, `arg1` = out | `resultInt` = ok |
 | `model.spawn` | `arg0` = in (foreign mesh or .nif) | `resultInt` = placed ref FormID as an int32 bit pattern (0xFFxxxxxx arrives negative; mask with 0xFFFFFFFF). MUTATES the save |

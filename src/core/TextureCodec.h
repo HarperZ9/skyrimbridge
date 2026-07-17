@@ -75,11 +75,21 @@ namespace SB::TexCodec
     // clamp-edge 2x2 box-filter chain down to 1x1 is appended and the header
     // carries the mip count. BC1 writes opaque color (no 1-bit alpha mode);
     // BC3 carries the alpha channel.
-    std::vector<std::uint8_t> EncodeDDS(const Image& img, DDSFormat fmt, bool mipmaps);
+    //
+    // coverageThreshold (1..255) enables alpha-coverage-preserving mipmaps
+    // for alpha-tested foliage: a plain box filter dilutes alpha every level,
+    // so leaves and grass thin out and vanish at distance. With a threshold
+    // set, each generated mip's alpha is rescaled (bisected scale factor,
+    // erring thick within quantization) so the fraction of texels passing
+    // the alpha test stays at the top level's coverage. -1 = off. No effect
+    // on BC1 (it carries no alpha) or on the top level itself.
+    std::vector<std::uint8_t> EncodeDDS(const Image& img, DDSFormat fmt, bool mipmaps,
+                                        int coverageThreshold = -1);
     // Back-compat wrapper: uncompressed, default single-mip byte layout.
     std::vector<std::uint8_t> EncodeDDS_RGBA(const Image& img, bool mipmaps = false);
     bool WriteDDS(const std::filesystem::path& out, const Image& img,
-                  bool mipmaps = true, DDSFormat fmt = DDSFormat::RGBA8);
+                  bool mipmaps = true, DDSFormat fmt = DDSFormat::RGBA8,
+                  int coverageThreshold = -1);
 
     // 32-bit uncompressed top-origin TGA (the DDS -> editable-format lane).
     bool WriteTGA(const std::filesystem::path& out, const Image& img);
@@ -89,5 +99,6 @@ namespace SB::TexCodec
     // Generic: decode any supported input (incl. DDS) and write by output
     // extension (.dds -> fmt+mips, .tga -> 32-bit TGA).
     bool Convert(const std::filesystem::path& in, const std::filesystem::path& out,
-                 DDSFormat fmt = DDSFormat::RGBA8, bool mipmaps = true);
+                 DDSFormat fmt = DDSFormat::RGBA8, bool mipmaps = true,
+                 int coverageThreshold = -1);
 }

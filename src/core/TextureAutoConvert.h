@@ -50,9 +50,10 @@ namespace SB
 
     private:
         std::filesystem::path m_root = "Data/Textures";
-        int                   m_format = 2;       // 0=RGBA8 1=BC1 2=BC3
+        int                   m_format = 2;       // 0=RGBA8 1=BC1 2=BC3 3=BC7
         bool                  m_mipmaps = true;
         bool                  m_refresh = false;
+        int                   m_coverage = -1;    // alpha-test threshold, -1 = off
         std::atomic<bool>     m_busy{ false };
     };
 }

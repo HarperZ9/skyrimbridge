@@ -349,7 +349,17 @@ order agreed with the operator:
     0xFFxxxxxx dynamic forms). Game-bound: protocol section 7. MUTATES the
     save per spawn; conversion runs on the game's frame thread (a very large
     mesh hitches for the convert's duration).
-15. Alpha-coverage-preserving mipmaps for foliage (offline-provable). (open)
+15. ~~Alpha-coverage-preserving mipmaps for foliage~~ DONE 2026-07-16 late:
+    `ScaleAlphaToCoverage` in TextureCodec (bisected alpha scale per mip,
+    erring thick within quantization), wired as `coverageThreshold` through
+    EncodeDDS/WriteDDS/Convert. Surfaces: `ConvertTextureFoliage` native
+    (33rd), `texture.foliage` verb (12th), `[TextureConvert] CoverageMips` +
+    `CoverageThreshold` for the background converters (both configs updated,
+    default OFF). Offline-proven: `tests/validate_foliage_mips.py`, 10/10
+    (defect demonstrated first: synthetic sparse foliage collapses to 0.000
+    coverage under naive mips, real modlist foliage decays measurably; fix
+    holds c0 on every mip and survives BC3 quantization). The in-game payoff
+    (distant foliage keeps its density) is aesthetic and operator-judged.
 16. Tree wind vertex-color auto-painting + Tree shader type in ModelCodec;
     verify the channel-to-sway mapping against a vanilla tree NIF offline
     first. (open)

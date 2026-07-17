@@ -70,6 +70,9 @@ namespace SB
     //   region.dump    arg0 = "0x<region>"         -> resultText
     //   region.weather arg0 = "0x<region>", arg1 = "0x<weather>", argInt = chance -> resultInt
     //   texture.convert arg0 = in, arg1 = out, argInt = 0|1|2|3 (RGBA8|BC1|BC3|BC7) -> resultInt = ok
+    //   texture.foliage arg0 = in, arg1 = out, argInt = fmt | (threshold << 8)
+    //                  (fmt as texture.convert; threshold 0 -> 128). Coverage-
+    //                  preserving mips for alpha-tested foliage. -> resultInt = ok
     //   texture.scan   argInt = 1 (dry) | 0 (live) -> resultInt = converted
     //   model.convert  arg0 = in, arg1 = out       -> resultInt = ok
     //   model.spawn    arg0 = in (foreign mesh or .nif) -> resultInt = placed
