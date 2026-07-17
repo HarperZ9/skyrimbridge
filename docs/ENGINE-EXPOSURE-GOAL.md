@@ -302,10 +302,17 @@ confidence are labeled honestly.
    offline by `tests/validate_model_codec.py` (21 checks): the emitted NIF
    re-parses with an independent reader, geometry round-trips full-float exact,
    and our decoder consumes a real modlist BSTriShape byte-for-byte.
-   HONEST NULLS (the ambitious 20%, deferred R&D): the RUNTIME NiObject-graph
-   construction path (build BSTriShape/BSGeometry live in memory rather than
-   emit a file); skinned/animated meshes; multi-shape files (first
-   primitive/group only); collision (bhk*) generation; Draco/sparse glTF.
+   RUNTIME PATH DONE 2026-07-16 late: `SpawnModel` native (32nd) converts a
+   foreign mesh into `meshes\SkyrimBridge\spawn\`, creates a dynamic Static
+   form via the engine's form factory, and places a reference at the player,
+   so the ENGINE's own loader constructs the NiObject graph. Synthetic
+   in-memory BSTriShape construction is now an explicit NON-GOAL (same rule
+   as B8: no synthetic engine objects; hand the engine files it natively
+   loads). Game-bound: docs/VALIDATION-PROTOCOL.md section 7. MUTATES the
+   save (dynamic form + placed ref): disposable-save testing only.
+   HONEST NULLS remaining: skinned/animated meshes; multi-shape files (first
+   primitive/group only); collision (bhk*) generation; Draco/sparse glTF;
+   spawned material fidelity is bounded by what the source carried.
 
 **Lane D: expose it as a real utility surface.**
 10. ~~Broaden the surface beyond Papyrus~~ DONE 2026-07-16: external command

@@ -356,6 +356,63 @@ namespace SB::PapyrusBridge
         return ok;
     }
 
+    // cgf "SkyrimBridge.SpawnModel" "in.obj"  — the pragmatic runtime-model
+    // path. Materializes the mesh under meshes\SkyrimBridge\spawn\ (foreign
+    // formats convert; a .nif copies), creates a dynamic Static form whose
+    // model points at it, and places one reference at the player, so the
+    // ENGINE's own model loader constructs the NiObject graph. No synthetic
+    // engine objects: the same architecture rule as the texture-load hook.
+    // Returns the placed reference's FormID, 0 on failure. The dynamic form
+    // and the reference persist in the save: test on a disposable save and
+    // remove with the console (click the ref, "markfordelete").
+    static std::int32_t SpawnModel(RE::StaticFunctionTag*, RE::BSFixedString a_in)
+    {
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player || !player->Is3DLoaded()) {
+            SKSE::log::warn("SpawnModel: needs a loaded player (in-game only)");
+            return 0;
+        }
+
+        std::filesystem::path in(a_in.c_str());
+        std::error_code ec;
+        std::filesystem::create_directories("Data/meshes/SkyrimBridge/spawn", ec);
+        const std::string stem = in.stem().string();
+        const std::filesystem::path out =
+            std::filesystem::path("Data/meshes/SkyrimBridge/spawn") / (stem + ".nif");
+
+        bool ok;
+        if (_stricmp(in.extension().string().c_str(), ".nif") == 0) {
+            std::filesystem::copy_file(in, out, std::filesystem::copy_options::overwrite_existing, ec);
+            ok = !ec;
+        } else {
+            ok = ModelCodec::ConvertToNIF(in, out);
+        }
+        if (!ok) {
+            SKSE::log::warn("SpawnModel: could not materialize {} -> {}", in.string(), out.string());
+            return 0;
+        }
+
+        RE::TESObjectSTAT* stat = nullptr;
+        if (auto* factory = RE::IFormFactory::GetFormFactoryByType(RE::FormType::Static))
+            if (auto* form = factory->Create())
+                stat = form->As<RE::TESObjectSTAT>();
+        if (!stat) {
+            SKSE::log::warn("SpawnModel: Static form factory unavailable");
+            return 0;
+        }
+        const std::string rel = "SkyrimBridge\\spawn\\" + stem + ".nif";
+        stat->SetModel(rel.c_str());
+
+        auto ref = player->PlaceObjectAtMe(stat, false);
+        if (!ref) {
+            SKSE::log::warn("SpawnModel: PlaceObjectAtMe failed for {}", rel);
+            return 0;
+        }
+        SKSE::log::info("SpawnModel: {} -> meshes\\{} : placed 0x{:08X} (dynamic STAT 0x{:08X})",
+                        in.string(), rel, ref->GetFormID(), stat->GetFormID());
+        return static_cast<std::int32_t>(ref->GetFormID());
+    }
+
     static bool ConvertTextureFmt(RE::StaticFunctionTag*, RE::BSFixedString a_in,
                                   RE::BSFixedString a_out, RE::BSFixedString a_fmt)
     {
@@ -418,8 +475,9 @@ namespace SB::PapyrusBridge
         vm->RegisterFunction("ConvertTextureFmt",   "SkyrimBridge", ConvertTextureFmt);
         vm->RegisterFunction("TextureScanNow",      "SkyrimBridge", TextureScanNow);
         vm->RegisterFunction("ConvertModel",        "SkyrimBridge", ConvertModel);
+        vm->RegisterFunction("SpawnModel",          "SkyrimBridge", SpawnModel);
 
-        SKSE::log::info("PapyrusBridge: registered 31 native functions under 'SkyrimBridge'");
+        SKSE::log::info("PapyrusBridge: registered 32 native functions under 'SkyrimBridge'");
         return true;
     }
 }

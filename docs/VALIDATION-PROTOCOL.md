@@ -171,6 +171,31 @@ is open complete after unpausing (dispatch is one per frame).
 **Record:** any dispatch AV line (`BridgeCommand: dispatch AV on verb ...`):
 that is the SEH guard doing its job, but each one is a bug report.
 
+## 7. Runtime model spawn (per-op, no toggle)
+
+`SpawnModel` is opt-in per invocation (a console call is the gate), but it
+MUTATES the save: it creates a dynamic Static form and places a persistent
+reference. Test on a disposable save only.
+
+**Steps:** put a small foreign mesh somewhere reachable, e.g.
+`Data\test.obj` (any static single-shape OBJ or glTF/GLB). In-game:
+
+```
+cgf "SkyrimBridge.SpawnModel" "Data/test.obj"
+```
+
+**Expected log:** `SpawnModel: Data/test.obj -> meshes\SkyrimBridge\spawn\test.nif : placed 0x...`
+(failure paths log `SpawnModel: ...` warnings naming the stage).
+
+**Pass:** the mesh appears at the player's position, loaded by the engine's
+own model loader. Geometry is the claim under test; the material is only as
+good as the source carried, so an untextured OBJ rendering flat or purple is
+NOT a failure. Click the ref in the console and `markfordelete` to clean up,
+then discard the save.
+
+**Record:** whether the shape appears at all (loader accepted our NIF), scale
+and orientation sanity, and any crash on `markfordelete` or cell reload.
+
 ---
 
 ## After a PASS

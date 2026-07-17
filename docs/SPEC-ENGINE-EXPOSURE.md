@@ -185,13 +185,22 @@ Validation receipt: `tests/validate_model_codec.py` (21 checks) re-parses the
 emitted NIF with an independent reader, round-trips geometry full-float exact,
 and consumes a real modlist BSTriShape byte-for-byte.
 
-Honest nulls: no runtime NiObject-graph construction (file emission only), no
-skinned/animated meshes, first primitive/group only, no collision (bhk*)
-generation, no Draco/sparse glTF.
+**Runtime path:** `SpawnModel` materializes a foreign mesh (or copies a .nif)
+under `meshes\SkyrimBridge\spawn\`, creates a dynamic Static form pointing at
+it, and places one reference at the player, so the engine's own model loader
+constructs the NiObject graph. Building BSTriShape graphs synthetically in
+memory is a deliberate non-goal, the same architecture rule as the
+texture-load hook: the engine constructs its own objects, we hand it files it
+natively loads. The dynamic form and reference persist in the save (test on a
+disposable save; remove via console `markfordelete`).
+
+Honest nulls: no skinned/animated meshes, first primitive/group only, no
+collision (bhk*) generation, no Draco/sparse glTF; a spawned mesh's material
+is only as good as what the source carried (an untextured OBJ renders flat).
 
 ---
 
-## 5. Native API reference (31 natives, script name `SkyrimBridge`)
+## 5. Native API reference (32 natives, script name `SkyrimBridge`)
 
 Console form: `cgf "SkyrimBridge.<name>" <args...>`
 
@@ -250,6 +259,7 @@ Console form: `cgf "SkyrimBridge.<name>" <args...>`
 | Native | Signature |
 |---|---|
 | ConvertModel | `bool (string in, string out)` — OBJ/glTF/GLB in, NIF out |
+| SpawnModel | `int (string in)` — convert + place at the player via the engine loader; returns the ref's FormID (MUTATES the save) |
 
 ---
 
