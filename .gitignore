@@ -6,3 +6,6 @@ vcpkg_installed/
 __pycache__/
 .ruff_cache/
 dist/
+
+# Local-only Claude instructions (global standard: never commit)
+CLAUDE.local.md
