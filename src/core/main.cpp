@@ -449,6 +449,12 @@ static void OnMessage(SKSE::MessagingInterface::Message* a_msg)
     switch (a_msg->type) {
     case SKSE::MessagingInterface::kPostLoad:
     {
+        // Every SKSE plugin is loaded by kPostLoad, so probe here first: each
+        // native replacement below checks these flags and stands down when the
+        // original plugin is present. Detect() re-probes safely and is called
+        // again at kDataLoaded to catch KiLoader-hosted plugins that load late.
+        SB::CompatDetect::Get().Detect();
+
         // Editor-ID cache hooks must install before data loading begins so
         // the weather workshop can name forms (presets are keyed by EditorID).
         // This natively replaces the third-party NativeEditorID fix.
@@ -518,7 +524,12 @@ static void OnMessage(SKSE::MessagingInterface::Message* a_msg)
         // KreatE image-space overlay loader: applies the per-FormID image
         // space grading that ships in a KreatE profile. Root is configurable;
         // the default matches the Elder ENB layout.
-        {
+        // KreatE itself is the original loader. When it is installed it owns
+        // profile application and we do not touch those records. See CREDITS.md.
+        if (SB::CompatDetect::Get().HasKreatE()) {
+            SKSE::log::info("SkyrimBridge: KreatE present — deferring profile "
+                "loading to it, native KreatE loader inactive");
+        } else {
             std::filesystem::path kreateRoot("KreatE/Presets");
             std::ifstream kcfg(configDir / "KreateRoot.txt");
             if (kcfg) {

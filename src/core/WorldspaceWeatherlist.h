@@ -2,8 +2,12 @@
 //=============================================================================
 //  WorldspaceWeatherlist.h — per-worldspace ENB weatherlist switching
 //
-//  Native replacement for the third-party per-worldspace weatherlist plugin
-//  (and its loader framework). SkyrimBridge reads its OWN routing config,
+//  Native replacement for ENBWorldspaceWeatherlists and its KiLoader framework
+//  by Kitsuune (LonelyKitsuune). Derived by reverse-engineering Kitsuune's
+//  compiled binaries, NOT clean-room; see CREDITS.md, permission-gated and not
+//  for public release.
+//
+//  SkyrimBridge reads its OWN routing config,
 //  detects the player's worldspace natively (CommonLibSSE-NG), and when it
 //  changes to a routed worldspace overwrites ENB's `enbseries\_weatherlist.ini`
 //  with the mapped file and asks ENB to reload. No external loader involved.

@@ -8,6 +8,7 @@
 //=============================================================================
 
 #include "EnbLightInventoryFix.h"
+#include "CompatDetect.h"
 
 #include <RE/Skyrim.h>
 #include <SKSE/SKSE.h>
@@ -104,6 +105,15 @@ namespace SB
     void EnbLightInventoryFix::Install()
     {
         if (m_installed) return;
+
+        // ELIF is the original. If it is loaded it already hooks these two
+        // inventory-3D passes; installing over it would double-detour the same
+        // targets. Stand down. See CREDITS.md.
+        if (CompatDetect::Get().HasELIF()) {
+            SKSE::log::info("EnbLightInventoryFix: ELIF present — deferring the "
+                "inventory-3D light fix to it, hooks not installed");
+            return;
+        }
 
         if (!REL::Module::IsAE()) {
             SKSE::log::info("EnbLightInventoryFix: AE-only (reversed IDs are AE 1.6.x); "
