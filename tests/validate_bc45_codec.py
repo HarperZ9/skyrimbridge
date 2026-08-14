@@ -20,6 +20,7 @@ import struct
 import sys
 
 from PIL import Image
+from test_support import require_mods_root
 
 _passed = _failed = 0
 
@@ -110,7 +111,7 @@ pil = Image.open(io.BytesIO(dds)).convert("RGBA").tobytes()
 check("64 random BC4 blocks byte-exact vs PIL", decode_bc4_ours(32, 32, bytes(blocks)) == pil)
 
 print("[real modlist BC4 textures]")
-MODS = r"E:\Modlists\SkyGroundChronicles\mods"
+MODS = require_mods_root()
 real = []
 for dirpath, _, files in os.walk(MODS):
     for fn in files:

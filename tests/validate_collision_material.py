@@ -25,8 +25,7 @@ import re
 import struct
 import sys
 
-sys.path.insert(0, r"C:\Users\Zain\AppData\Local\Temp\claude"
-                r"\C--\d8c04c17-40f0-4f6f-bc85-54dd1ce6b32c\scratchpad")
+from nif_test_support import btype, parse_nif
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CPP = os.path.join(ROOT, "src", "core", "CollisionMaterial.cpp")
@@ -197,7 +196,6 @@ for bl in blocks: data += bytes(bl.b)
 tmp = os.path.join(os.environ.get("TEMP", "."), "sb_material.nif")
 open(tmp, "wb").write(data)
 try:
-    from parse_convex_collision import parse_nif, btype
     nif = parse_nif(tmp)
     d = nif["data"]
     lmat, = struct.unpack_from("<I", d, nif["starts"][list_idx] + 4 + n*4)

@@ -22,10 +22,7 @@ import re
 import struct
 import sys
 
-sys.path.insert(0, r"C:\Users\Zain\AppData\Local\Temp\claude"
-                r"\C--\d8c04c17-40f0-4f6f-bc85-54dd1ce6b32c\scratchpad")
-from parse_convex_collision import parse_nif, btype
-from cmsd_parse import parse_cmsd
+from nif_test_support import btype, parse_cmsd, parse_nif
 
 
 def parse_cms(d, off, sz):

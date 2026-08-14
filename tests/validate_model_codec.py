@@ -17,6 +17,8 @@ import os
 import struct
 import sys
 
+from test_support import require_fixture
+
 PASS = FAIL = 0
 def check(name, ok, detail=""):
     global PASS, FAIL
@@ -330,9 +332,9 @@ def test_write_and_reparse():
 
 def test_against_real_mesh():
     print("[block field-layout vs real shipping SSE mesh]")
-    ref = r"E:\Modlists\SkyGroundChronicles\mods\Arcs WispMother Redux 2K\meshes\clutter\ingredients\wispwrappings.nif"
-    if not os.path.exists(ref):
-        check("reference mesh available", False); return
+    ref = require_fixture(
+        r"Arcs WispMother Redux 2K\meshes\clutter\ingredients\wispwrappings.nif"
+    )
     data = open(ref, "rb").read()
     r = read_nif(data)
     check("reference is 20.2.0.7 / user12 / bs100", r["ver"] == 0x14020007 and r["uver"] == 12 and r["bsver"] == 100)

@@ -17,6 +17,8 @@ import random
 import struct
 import sys
 
+from test_support import require_mods_root
+
 PASS = FAIL = 0
 def check(name, ok, detail=""):
     global PASS, FAIL
@@ -236,7 +238,7 @@ def test_handbuilt_blocks():
         check(name, ours == ref)
 
 def find_real_dds(limit_each=4, max_dim=1024):
-    root = r"E:\Modlists\SkyGroundChronicles\mods"
+    root = require_mods_root()
     dxt1, dxt5 = [], []
     for dirpath, _dirs, files in os.walk(root):
         for f in files:
@@ -325,7 +327,7 @@ def test_encode():
     check("BC3: 2-value alpha blocks round-trip alpha-exact", a_ok)
 
 def find_real_pngs_for_encode():
-    root = r"E:\Modlists\SkyGroundChronicles\mods"
+    root = require_mods_root()
     for dirpath, _dirs, files in os.walk(root):
         if "enbseries" not in dirpath.lower(): continue
         for f in files:
