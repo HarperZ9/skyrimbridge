@@ -86,12 +86,21 @@ their compiled binary is a matter between authors, and Kitsuune is active
 
 **Permission has not been requested, and has not been granted.**
 
-Standing decision, 2026-08-14: the native-replacement suite is **not pushed
-public**. It stays in the tree, builds, is maintained, and defers to the original
-at runtime, but it is excluded from public release packages. SkyrimBridge's other
-capabilities ship publicly without it: live parameters, the texture / model /
-collision pipelines, diagnostics, and the command channel. None of those touch
-anyone else's work.
+Be precise about what is and is not public, because these are different things.
+
+The **source** is public. It sits on this branch in a public repository and has
+since roughly 2026-07, before this file existed. It is not on `main`. Standing
+decision, 2026-08-14: leave it there, now that it carries attribution and defers
+to the originals at runtime.
+
+The suite is **not distributed as a mod**. It is excluded from public release
+packages and is not uploaded to Nexus or anywhere else. SkyrimBridge's other
+capabilities ship without it: live parameters, the texture / model / collision
+pipelines, diagnostics, and the command channel. None of those touch anyone
+else's work.
+
+Readable source is not a licence and not a release. Do not read the first fact
+as permission for the second.
 
 This posture changes only if Kitsuune grants explicit permission. Nothing about
 the code, its quality, or the fact that it is a reimplementation rather than a
