@@ -31,10 +31,11 @@ import struct
 import sys
 
 from PIL import Image
+from test_support import require_mods_root
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CPP = os.path.join(ROOT, "src", "core", "TextureBC7.cpp")
-MODS = r"E:\Modlists\SkyGroundChronicles\mods"
+MODS = require_mods_root()
 
 # ── tables parsed from the shipped C++ ─────────────────────────────────────
 _src = open(CPP, encoding="utf-8").read()

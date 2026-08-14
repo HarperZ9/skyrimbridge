@@ -24,12 +24,15 @@ import os
 import struct
 import sys
 
-sys.path.insert(0, r"C:\Users\Zain\AppData\Local\Temp\claude"
-                r"\C--\d8c04c17-40f0-4f6f-bc85-54dd1ce6b32c\scratchpad")
-from cmsd_parse import parse_cmsd, reserialize
-from parse_convex_collision import parse_nif, btype
+from nif_test_support import (
+    btype,
+    parse_cmsd,
+    parse_nif,
+    reserialize_cmsd as reserialize,
+)
+from test_support import require_mods_root
 
-MODS = r"E:\Modlists\SkyGroundChronicles\mods"
+MODS = require_mods_root()
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CPP = os.path.join(ROOT, "src", "core", "CompressedMesh.cpp")
 

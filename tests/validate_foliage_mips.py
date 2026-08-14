@@ -22,8 +22,9 @@ import struct
 import sys
 
 from PIL import Image
+from test_support import require_mods_root
 
-MODS = r"E:\Modlists\SkyGroundChronicles\mods"
+MODS = require_mods_root()
 
 # ── port of the C++ ─────────────────────────────────────────────────────────
 

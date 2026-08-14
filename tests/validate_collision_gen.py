@@ -29,8 +29,12 @@ import re
 import struct
 import sys
 
-MODS = r"E:\Modlists\SkyGroundChronicles\mods"
-DONOR = os.path.join(MODS, r"2K Deer Skull and Antlers\meshes\clutter\bones\deerskullstatic.nif")
+from nif_test_support import btype, parse_nif
+from test_support import require_fixture
+
+DONOR = require_fixture(
+    r"2K Deer Skull and Antlers\meshes\clutter\bones\deerskullstatic.nif"
+)
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CPP = os.path.join(ROOT, "src", "core", "ModelCodec.cpp")
 
@@ -327,13 +331,10 @@ def write_cube_nif_with_collision():
     return out
 
 
-sys.path.insert(0, r"C:\Users\Zain\AppData\Local\Temp\claude"
-                r"\C--\d8c04c17-40f0-4f6f-bc85-54dd1ce6b32c\scratchpad")
 nif_bytes = write_cube_nif_with_collision()
 tmp = os.path.join(os.environ.get("TEMP", "."), "sb_collision_cube.nif")
 open(tmp, "wb").write(nif_bytes)
 try:
-    from parse_convex_collision import parse_nif, btype
     nif = parse_nif(tmp)
     types = [btype(nif, i) for i in range(nif["nblocks"])]
     check("8 blocks with the expected types",

@@ -30,10 +30,17 @@ import re
 import struct
 import sys
 
-MODS = r"E:\Modlists\SkyGroundChronicles\mods"
-ASPEN1 = os.path.join(MODS, r"Aspens Ablaze\meshes\landscape\trees\treeaspen01.nif")
-ASPEN6 = os.path.join(MODS, r"Aspens Ablaze\meshes\landscape\trees\treeaspen06.nif")
-GLADE = os.path.join(MODS, r"A Canticle Tree\meshes\dlc01\plants\dlc01ancestorgladetree01.nif")
+from test_support import require_fixture
+
+ASPEN1 = require_fixture(
+    r"Aspens Ablaze\meshes\landscape\trees\treeaspen01.nif"
+)
+ASPEN6 = require_fixture(
+    r"Aspens Ablaze\meshes\landscape\trees\treeaspen06.nif"
+)
+GLADE = require_fixture(
+    r"A Canticle Tree\meshes\dlc01\plants\dlc01ancestorgladetree01.nif"
+)
 CPP = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                    "src", "core", "ModelCodec.cpp")
 

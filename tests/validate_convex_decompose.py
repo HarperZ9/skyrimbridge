@@ -28,8 +28,7 @@ import os
 import struct
 import sys
 
-sys.path.insert(0, r"C:\Users\Zain\AppData\Local\Temp\claude"
-                r"\C--\d8c04c17-40f0-4f6f-bc85-54dd1ce6b32c\scratchpad")
+from nif_test_support import btype, parse_nif
 
 _passed = _failed = 0
 
@@ -379,7 +378,6 @@ nif_bytes, list_idx, rigid_idx, coll_idx = emit_listshape_nif(multi_h)
 tmp = os.path.join(os.environ.get("TEMP", "."), "sb_listshape.nif")
 open(tmp, "wb").write(nif_bytes)
 try:
-    from parse_convex_collision import parse_nif, btype
     nif = parse_nif(tmp)
     d = nif["data"]
     n = len(multi_h)

@@ -201,3 +201,26 @@ target_compile_definitions(d3d11_proxy PRIVATE
 
 # Do NOT link d3d11.lib (we ARE d3d11.dll) or dxgi.lib (importing dxgi
 # corrupts graphics-stack init order; factories load lazily instead).
+
+# ============================================================================
+# Offline release validation
+# ============================================================================
+
+include(CTest)
+if(BUILD_TESTING)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(
+        NAME SkyrimBridge.PortableValidation
+        COMMAND
+            "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_validation.py"
+            --mode portable
+            --receipt-dir "${CMAKE_CURRENT_BINARY_DIR}/validation"
+    )
+    set_tests_properties(
+        SkyrimBridge.PortableValidation
+        PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            TIMEOUT 600
+    )
+endif()
