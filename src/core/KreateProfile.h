@@ -4,7 +4,10 @@
 //
 //  Applies every record override that ships inside a KreatE profile directly
 //  through CommonLibSSE-NG, so the operator's presets work with no external
-//  loader (no KreatE.dll, no Kitsuune plugins):
+//  loader (no KreatE.dll, no Kitsuune plugins). Reimplements the functionality
+//  of KreatE by Kitsuune (LonelyKitsuune), derived by reverse-engineering their
+//  compiled binaries, NOT clean-room. See CREDITS.md — permission-gated, not
+//  for public release. Record types applied:
 //
 //    <profile>/ImageSpaces/*.ini              -> RE::TESImageSpace
 //    <profile>/Weathers/*.ini                 -> RE::TESWeather

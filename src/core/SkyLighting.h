@@ -2,9 +2,12 @@
 //=============================================================================
 //  SkyLighting.h — SkyrimBridge's celestial lighting model
 //
-//  Native replacement for the third-party orbital/ambient lighting plugins
-//  (the mature one supersedes the older shadow/VL one — a single component
-//  replaces both). A real astronomical model: axial tilt + latitude + solstice
+//  Native replacement for AELAS (with EVLaS) by Kitsuune (LonelyKitsuune) —
+//  a single component replaces both. Derived by reverse-engineering Kitsuune's
+//  compiled binaries, NOT clean-room; see CREDITS.md, permission-gated and not
+//  for public release.
+//
+//  A real astronomical model: axial tilt + latitude + solstice
 //  timing -> sun declination / hour-angle -> altitude / azimuth / incident
 //  vector, plus moon-phase-weighted direct/volumetric source intensities and
 //  dynamic directional-ambient.

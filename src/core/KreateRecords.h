@@ -12,6 +12,10 @@
 //  a dedicated tolerant parser). This unit covers the other four so the whole
 //  KreatE profile applies with no external loader.
 //
+//  Reimplements the functionality of KreatE by Kitsuune (LonelyKitsuune),
+//  derived by reverse-engineering their compiled binaries, NOT clean-room.
+//  See CREDITS.md — permission-gated, not for public release.
+//
 //  Author: Zain Dana Harper
 //  License: MIT
 //=============================================================================

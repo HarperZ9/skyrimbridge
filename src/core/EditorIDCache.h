@@ -7,8 +7,11 @@
 //  the engine's own editorID→form map so the console `help` command and
 //  LookupByEditorID() work for all form types.
 //
-//  Replaces: NativeEditorID Fix (Kitsuune), po3's CacheEditorIDs tweak
-//  Zero external dependencies — integrated natively into SkyrimBridge.
+//  Replaces: NativeEditorID Fix by Kitsuune (LonelyKitsuune), and po3's
+//  CacheEditorIDs tweak. Zero external dependencies — integrated natively.
+//
+//  Derived by reverse-engineering Kitsuune's compiled binary, NOT clean-room.
+//  See CREDITS.md — permission-gated, not for public release.
 //
 //  Author: Zain Dana Harper
 //  License: MIT

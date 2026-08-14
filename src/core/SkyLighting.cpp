@@ -3,6 +3,7 @@
 //=============================================================================
 
 #include "SkyLighting.h"
+#include "CompatDetect.h"
 #include "SBConfig.h"
 
 #include <RE/Skyrim.h>
@@ -147,6 +148,15 @@ namespace SB
 
     void SkyLighting::Initialize(const std::filesystem::path& configDir)
     {
+        // AELAS (or its predecessor EVLaS) owns celestial lighting when present.
+        // Stand down so both can coexist in one load order. See CREDITS.md.
+        if (CompatDetect::Get().HasExternalCelestialProvider()) {
+            m_active = false;
+            SKSE::log::info("SkyLighting: AELAS/EVLaS present — deferring "
+                "celestial lighting to it, SkyLighting inactive");
+            return;
+        }
+
         std::ifstream in(configDir / "Sky.ini");
         if (!in) {
             SKSE::log::info("SkyLighting: no Sky.ini, inactive");

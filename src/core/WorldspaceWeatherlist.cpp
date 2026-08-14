@@ -3,6 +3,7 @@
 //=============================================================================
 
 #include "WorldspaceWeatherlist.h"
+#include "CompatDetect.h"
 #include "ENBInterface.h"
 #include "SBConfig.h"
 
@@ -93,6 +94,14 @@ namespace SB
 
     void WorldspaceWeatherlist::Initialize(const std::filesystem::path& enbseriesDir)
     {
+        // ENB Worldspace Weatherlists owns this routing when installed. Stand
+        // down rather than fight it over `_weatherlist.ini`. See CREDITS.md.
+        if (CompatDetect::Get().HasWorldspaceWeatherlists()) {
+            SKSE::log::info("WorldspaceWeatherlist: ENB Worldspace Weatherlists "
+                "present — deferring weatherlist routing to it, inactive");
+            return;
+        }
+
         m_enbseriesDir = enbseriesDir;
 
         std::error_code ec;
