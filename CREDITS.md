@@ -88,13 +88,20 @@ their compiled binary is a matter between authors, and Kitsuune is active
 
 Be precise about what is and is not public, because these are different things.
 
-The **source** is public. It sits on this branch in a public repository and has
-since roughly 2026-07, before this file existed. It is not on `main`. Standing
-decision, 2026-08-14: leave it there, now that it carries attribution and defers
+The **source** is public, and as of 2026-08-14 it is on `main`. It had been
+readable on a feature branch since roughly 2026-07, before this file existed.
+Standing decision: leave it public, now that it carries attribution and defers
 to the originals at runtime.
 
 The suite is **not distributed as a mod**. It is excluded from public release
-packages and is not uploaded to Nexus or anywhere else. SkyrimBridge's other
+packages and is not uploaded to Nexus or anywhere else. Note that the release
+pipeline is: testing, then a GitHub release as staging, then Nexus as the
+official release. This exclusion applies at every stage of it, and a built
+binary is a stronger act than readable source, because nothing in the build
+currently separates the suite from the rest of the plugin: the six units are
+unconditionally in the CMake target sources with 37 call sites across six
+files, and there is no option to exclude them. Shipping any compiled
+SkyrimBridge ships this. SkyrimBridge's other
 capabilities ship without it: live parameters, the texture / model / collision
 pipelines, diagnostics, and the command channel. None of those touch anyone
 else's work.
