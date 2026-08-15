@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -130,11 +131,66 @@ def main() -> int:
             for info in release_zip.infolist():
                 assert info.date_time == (2000, 1, 1, 0, 0, 0), info.filename
 
+            check_no_native_replacements(release_zip)
+
     print(
         "PASS: deterministic public release package "
         f"({len(EXPECTED_PAYLOAD)} payload files + manifest)"
     )
     return 0
+
+
+# Markers unique to the Kitsuune-derived native replacement suite. Each is a
+# class name or a config filename that only that suite emits, so a hit means a
+# build with SKYRIMBRIDGE_NATIVE_REPLACEMENTS=ON reached the archive.
+#
+# "ENBWorldspaceWeatherlists" is deliberately NOT on this list: that string is
+# CompatDetect's detection record for Kitsuune's own plugin, and it is present
+# in both configurations by design. The distributable build still has to
+# recognise their plugins in order to defer to them.
+NATIVE_SUITE_MARKERS = (
+    b"SkyLighting",
+    b"EnbLightInventoryFix",
+    b"KreateProfile",
+    b"KreateRecords",
+    b"EditorIDCache",
+    b"LoadKreateProfile",
+    b"WeatherRouting.ini",
+)
+
+
+def check_no_native_replacements(release_zip: zipfile.ZipFile) -> None:
+    """Report whether the packaged binary carries the permission-gated suite.
+
+    Distributing it needs Kitsuune's permission, which has not been granted;
+    see CREDITS.md. A runtime toggle is not sufficient, because an inert copy
+    in the binary is still a copy, so this inspects the shipped bytes rather
+    than trusting the build configuration.
+
+    The default build is the full private one, and it is meant to contain the
+    suite, so finding it here is only a defect when an actual release is being
+    cut. Pass --release, or set SKYRIMBRIDGE_RELEASE=1, to make it fatal. The
+    release path must set one of those; without it this only warns, and a
+    warning nobody reads is how the suite would end up shipped.
+    """
+    strict = "--release" in sys.argv or os.environ.get("SKYRIMBRIDGE_RELEASE") == "1"
+
+    for info in release_zip.infolist():
+        if not info.filename.lower().endswith((".dll", ".exe")):
+            continue
+        blob = release_zip.read(info.filename)
+        found = [m.decode() for m in NATIVE_SUITE_MARKERS if m in blob]
+        if not found:
+            continue
+        message = (
+            f"{info.filename} contains the Kitsuune-derived native replacement "
+            f"suite: {', '.join(found)}. Configure with "
+            "-DSKYRIMBRIDGE_NATIVE_REPLACEMENTS=OFF for a distributable build. "
+            "See CREDITS.md."
+        )
+        if strict:
+            raise AssertionError(message)
+        print(f"NOTE: private build, not distributable. {message}")
 
 
 if __name__ == "__main__":

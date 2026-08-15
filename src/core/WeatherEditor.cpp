@@ -1,5 +1,8 @@
 #include "WeatherEditor.h"
+#include "CompatDetect.h"
+#if SKYRIMBRIDGE_NATIVE_REPLACEMENTS
 #include "EditorIDCache.h"
+#endif
 
 #include <RE/Skyrim.h>
 #include <SKSE/SKSE.h>
@@ -176,7 +179,19 @@ void WeatherSnapshot::ReadFromWeather(RE::TESWeather* w)
     if (!w) return;
 
     formID = w->GetFormID();
+#if SKYRIMBRIDGE_NATIVE_REPLACEMENTS
     editorID = EditorIDCache::Get().Lookup(formID);
+#else
+    // Without the native cache, names come from whichever EditorID provider the
+    // user already has (Kitsuune's NativeEditorID Fix, or po3's Tweaks). With
+    // neither, the fallback below names the weather by its FormID: the workshop
+    // stays usable, presets just key off hex instead of a readable name.
+    editorID.clear();
+    if (const auto fn = CompatDetect::Get().GetExternalEditorIDFunc()) {
+        if (const char* name = fn(formID); name != nullptr)
+            editorID = name;
+    }
+#endif
     if (editorID.empty()) {
         char buf[32];
         snprintf(buf, sizeof(buf), "%08X", formID);

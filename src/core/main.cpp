@@ -29,12 +29,14 @@
 #include "PapyrusBridge.h"
 #include "WriteBackProcessor.h"
 #include "WeatherEditor.h"
+#include "SBConfig.h"
+#if SKYRIMBRIDGE_NATIVE_REPLACEMENTS
 #include "EditorIDCache.h"
 #include "KreateProfile.h"
-#include "SBConfig.h"
 #include "WorldspaceWeatherlist.h"
 #include "SkyLighting.h"
 #include "EnbLightInventoryFix.h"
+#endif
 #include "EngineReflect.h"
 #include "EngineFixes.h"
 #include "TextureAutoConvert.h"
@@ -123,9 +125,11 @@ static void LoadGPUConfig(const std::filesystem::path& configDir)
 // fix defaults off (validate in-game before dropping the third-party DLL).
 struct NativeConfig
 {
+#if SKYRIMBRIDGE_NATIVE_REPLACEMENTS
     bool weatherRouting = true;
     bool sky = true;
     bool enbLightInventoryFix = false;
+#endif
     bool engineFixes = true;    // recovered AE spin-lock patch; validated before write
     bool textureAutoConvert = false;   // startup foreign-texture transcode (opt-in)
     bool textureLoadHook = false;      // in-flight foreign-texture substitution (opt-in)
@@ -139,9 +143,11 @@ static void LoadNativeConfig(const std::filesystem::path& configDir)
     auto doc = SB::Cfg::ParseFile(configDir / "SkyrimBridge.ini", &found);
     if (!found) return;
     if (auto* s = doc.Find("Native")) {
+#if SKYRIMBRIDGE_NATIVE_REPLACEMENTS
         s_native.weatherRouting       = s->Bool("WeatherRouting", s_native.weatherRouting);
         s_native.sky                  = s->Bool("Sky", s_native.sky);
         s_native.enbLightInventoryFix = s->Bool("EnbLightInventoryFix", s_native.enbLightInventoryFix);
+#endif
         s_native.engineFixes          = s->Bool("EngineFixes", s_native.engineFixes);
         s_native.textureAutoConvert   = s->Bool("TextureAutoConvert", s_native.textureAutoConvert);
         s_native.textureLoadHook      = s->Bool("TextureLoadHook", s_native.textureLoadHook);
@@ -364,6 +370,7 @@ static void DoFrameUpdate()
         SKSE::log::error("SkyrimBridge: WeatherEditor threw");
     }
 
+#if SKYRIMBRIDGE_NATIVE_REPLACEMENTS
     // 7. Native plugin replacements: per-worldspace ENB weatherlist routing
     //    and the celestial lighting model.
     try {
@@ -376,6 +383,7 @@ static void DoFrameUpdate()
     } catch (...) {
         SKSE::log::error("SkyrimBridge: SkyLighting threw");
     }
+#endif
 
     ++s_frameCount;
 }
@@ -455,6 +463,9 @@ static void OnMessage(SKSE::MessagingInterface::Message* a_msg)
         // again at kDataLoaded to catch KiLoader-hosted plugins that load late.
         SB::CompatDetect::Get().Detect();
 
+        LoadNativeConfig(std::filesystem::path("Data/SKSE/Plugins/SkyrimBridge"));
+
+#if SKYRIMBRIDGE_NATIVE_REPLACEMENTS
         // Editor-ID cache hooks must install before data loading begins so
         // the weather workshop can name forms (presets are keyed by EditorID).
         // This natively replaces the third-party NativeEditorID fix.
@@ -462,9 +473,9 @@ static void OnMessage(SKSE::MessagingInterface::Message* a_msg)
 
         // Native ENB Light Inventory Fix installs its engine hooks here,
         // before any menu can render a 3D item preview. Opt-in + AE-only.
-        LoadNativeConfig(std::filesystem::path("Data/SKSE/Plugins/SkyrimBridge"));
         if (s_native.enbLightInventoryFix)
             SB::EnbLightInventoryFix::Get().Install();
+#endif
 
         // In-flight foreign-texture substitution installs before any texture
         // can load. Redirect-only detours on LooseFileLocation; opt-in.
@@ -521,6 +532,7 @@ static void OnMessage(SKSE::MessagingInterface::Message* a_msg)
         SKSE::log::info("SkyrimBridge: weather workshop ready "
             "(presets in SkyrimBridge/WeatherPresets, hot-reload live)");
 
+#if SKYRIMBRIDGE_NATIVE_REPLACEMENTS
         // KreatE image-space overlay loader: applies the per-FormID image
         // space grading that ships in a KreatE profile. Root is configurable;
         // the default matches the Elder ENB layout.
@@ -555,6 +567,7 @@ static void OnMessage(SKSE::MessagingInterface::Message* a_msg)
         }
         if (s_native.sky)
             SB::SkyLighting::Get().Initialize(configDir);
+#endif  // SKYRIMBRIDGE_NATIVE_REPLACEMENTS
 
         // EngineReflect: register the record schemas (read/write/translate/verify
         // spine). Built on CommonLibSSE-NG RE:: layouts, the reversal substrate.

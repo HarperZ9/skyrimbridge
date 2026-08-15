@@ -94,14 +94,35 @@ Standing decision: leave it public, now that it carries attribution and defers
 to the originals at runtime.
 
 The suite is **not distributed as a mod**. It is excluded from public release
-packages and is not uploaded to Nexus or anywhere else. Note that the release
-pipeline is: testing, then a GitHub release as staging, then Nexus as the
-official release. This exclusion applies at every stage of it, and a built
-binary is a stronger act than readable source, because nothing in the build
-currently separates the suite from the rest of the plugin: the six units are
-unconditionally in the CMake target sources with 37 call sites across six
-files, and there is no option to exclude them. Shipping any compiled
-SkyrimBridge ships this. SkyrimBridge's other
+packages and is not uploaded to Nexus or anywhere else. The release pipeline is
+testing, then a GitHub release as staging, then Nexus as the official release,
+and the exclusion applies at every stage. A built binary is a stronger act than
+readable source.
+
+### How to build without it
+
+```
+cmake -S . -B build -DSKYRIMBRIDGE_NATIVE_REPLACEMENTS=OFF
+```
+
+`ON` is the default and gives the full private plugin. `OFF` omits the six
+units from the target sources entirely, so the suite is absent from the
+binary rather than disabled at runtime: an inert copy is still a copy.
+
+The distributable build still detects Kitsuune's plugins and defers to them,
+because that detection lives in `CompatDetect` and is not part of the suite.
+What changes is that SkyrimBridge no longer offers its own implementation when
+they are absent. The weather workshop keeps working; without the native
+EditorID cache it takes names from whichever provider the user already has, and
+falls back to naming weathers by FormID.
+
+`tests/validate_release_package.py` enforces this against the shipped bytes
+rather than the build configuration. Run it with `--release`, or set
+`SKYRIMBRIDGE_RELEASE=1`, on any release path: it then fails if the archive
+contains the suite. Without that flag it only warns, since the default build is
+the full one and is meant to contain it.
+
+SkyrimBridge's other
 capabilities ship without it: live parameters, the texture / model / collision
 pipelines, diagnostics, and the command channel. None of those touch anyone
 else's work.

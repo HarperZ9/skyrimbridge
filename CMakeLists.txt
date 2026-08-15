@@ -22,6 +22,33 @@ find_package(CommonLibSSE REQUIRED CONFIG)
 #   src/       — weather parameter computer, shared memory, ParmLink compat
 # ============================================================================
 
+#  The native replacement suite reimplements plugins by Kitsuune, derived from
+#  reverse-engineering their compiled binaries. Distributing it needs the
+#  author's permission, which has not been granted; see CREDITS.md. Nothing in
+#  the build used to separate it from the rest of the plugin, so every compiled
+#  SkyrimBridge contained it and no release could be cut without it.
+#
+#  ON keeps the full plugin, which is the private default. OFF produces a build
+#  with the suite absent from the binary entirely, not merely disabled at
+#  runtime: an inert copy is still a copy.
+option(SKYRIMBRIDGE_NATIVE_REPLACEMENTS
+       "Build the Kitsuune-derived native ENB plugin replacement suite" ON)
+
+set(SKYRIMBRIDGE_NATIVE_SOURCES "")
+if(SKYRIMBRIDGE_NATIVE_REPLACEMENTS)
+    set(SKYRIMBRIDGE_NATIVE_SOURCES
+        src/core/EditorIDCache.cpp
+        src/core/KreateProfile.cpp
+        src/core/KreateRecords.cpp
+        src/core/WorldspaceWeatherlist.cpp
+        src/core/SkyLighting.cpp
+        src/core/EnbLightInventoryFix.cpp
+    )
+    message(STATUS "SkyrimBridge: native replacement suite INCLUDED (private build)")
+else()
+    message(STATUS "SkyrimBridge: native replacement suite EXCLUDED (distributable build)")
+endif()
+
 add_commonlibsse_plugin(
     ${PROJECT_NAME}
     AUTHOR "Zain Dana Harper"
@@ -33,14 +60,8 @@ add_commonlibsse_plugin(
         src/core/PapyrusBridge.cpp
         src/core/WriteBackProcessor.cpp
         src/core/WeatherEditor.cpp
-        src/core/EditorIDCache.cpp
-        src/core/KreateProfile.cpp
-        src/core/KreateRecords.cpp
 
-        # Native replacements for the third-party ENB plugin suite
-        src/core/WorldspaceWeatherlist.cpp
-        src/core/SkyLighting.cpp
-        src/core/EnbLightInventoryFix.cpp
+        ${SKYRIMBRIDGE_NATIVE_SOURCES}
 
         # Engine-exposure spine + recovered binary patches
         src/core/EngineReflect.cpp
@@ -127,6 +148,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
     ENABLE_SKYRIM_AE=1
     SKYRIMBRIDGE_V3=1
     HAS_SKSE=1
+    SKYRIMBRIDGE_NATIVE_REPLACEMENTS=$<BOOL:${SKYRIMBRIDGE_NATIVE_REPLACEMENTS}>
 )
 
 target_precompile_headers(${PROJECT_NAME} PRIVATE

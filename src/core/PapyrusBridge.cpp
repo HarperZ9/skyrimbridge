@@ -20,7 +20,9 @@
 #include "PapyrusBridge.h"
 #include "BridgeData.h"
 #include "WeatherEditor.h"
+#if SKYRIMBRIDGE_NATIVE_REPLACEMENTS
 #include "KreateProfile.h"
+#endif
 #include "EngineReflect.h"
 #include "RegionWalker.h"
 #include "TextureCodec.h"
@@ -162,6 +164,8 @@ namespace SB::PapyrusBridge
 
     // ── KreatE profile natives (the menu surface) ────────────────────────
     // Console: cgf "SkyrimBridge.LoadKreateProfile" "Arrival of Autumn"
+    // Part of the Kitsuune-derived suite; absent from a distributable build.
+#if SKYRIMBRIDGE_NATIVE_REPLACEMENTS
 
     static int32_t LoadKreateProfile(RE::StaticFunctionTag*, RE::BSFixedString a_name)
     {
@@ -185,6 +189,7 @@ namespace SB::PapyrusBridge
     {
         return RE::BSFixedString(KreateProfile::Get().LoadedName().c_str());
     }
+#endif  // SKYRIMBRIDGE_NATIVE_REPLACEMENTS
 
     // ── EngineReflect natives (generic record read/write/verify) ─────────
     // In-game loop:  SkyrimBridge.EngineReflectDump 0x<formid>  (writes an INI
@@ -563,10 +568,12 @@ namespace SB::PapyrusBridge
         vm->RegisterFunction("ForceWeatherByID",   "SkyrimBridge", ForceWeatherByID);
         vm->RegisterFunction("ClearForcedWeather", "SkyrimBridge", ClearForcedWeather);
 
+#if SKYRIMBRIDGE_NATIVE_REPLACEMENTS
         vm->RegisterFunction("LoadKreateProfile",   "SkyrimBridge", LoadKreateProfile);
         vm->RegisterFunction("KreateProfileCount",  "SkyrimBridge", KreateProfileCount);
         vm->RegisterFunction("KreateProfileNameAt", "SkyrimBridge", KreateProfileNameAt);
         vm->RegisterFunction("ActiveKreateProfile", "SkyrimBridge", ActiveKreateProfile);
+#endif
 
         vm->RegisterFunction("EngineReflectDump",         "SkyrimBridge", EngineReflectDump);
         vm->RegisterFunction("EngineReflectApply",        "SkyrimBridge", EngineReflectApply);
