@@ -61,10 +61,28 @@ clouds, for setups that chain a D3D11 proxy.
 back with a round-trip check: image spaces, weathers (the full 487-field
 record), climates, lighting templates, water, effect shaders, lights,
 regions, worldspaces, grass, land textures, and trees. 827 named fields.
-[*]A native replacement suite for the third-party ENB plugins presets used to
-depend on: per-worldspace weather routing, a celestial lighting model with an
-optional orbital sun, an inventory-light fix, and a recovered engine patch.
+[*]A recovered engine patch for the AE spin-lock, validated against the live
+executable before each write.
 [/list]
+
+[size=4]Works alongside the plugins you already run[/size]
+
+SkyrimBridge detects KreatE, ELIF, EVLaS and AELAS, Native EditorID Fix, and
+ENB Worldspace Weatherlists at startup. When one is loaded, SkyrimBridge stands
+down from that feature and logs that it deferred, so nothing here competes with
+them and you are never asked to choose.
+
+Those plugins are by [b]Kitsuune (LonelyKitsuune)[/b]. SkyrimBridge does contain
+its own implementations of that functionality, developed by reverse-engineering
+their compiled binaries, and those are [b]not included in this download[/b].
+Redistributing them needs Kitsuune's permission, which has not been granted, so
+the released build is compiled with that suite absent from the binary rather
+than merely switched off. The full attribution and provenance record ships in
+the archive as [font=Courier New]Docs/CREDITS.md[/font].
+
+What that means in practice: install Kitsuune's plugins for those features. They
+are the originals, they are maintained, and SkyrimBridge is built to sit beside
+them.
 
 [b]For texture and model creators[/b]
 [list]
@@ -125,6 +143,20 @@ feature in its config file, under Data/SKSE/Plugins/SkyrimBridge/.
 The full feature reference, with every console command, config key, and
 command-channel verb, is in the docs folder and on the source repository. The
 source, build instructions, and the offline test harnesses are on GitHub.
+
+[size=4]Scope, stated plainly[/size]
+
+The offline gates are thorough: 18 validation harnesses cover the texture and
+model codecs, collision generation and material mapping, compressed mesh, tree
+wind, and deterministic packaging. The release archive is byte-reproducible and
+ships a content-hash manifest with a SHA-256 sidecar.
+
+What those gates do not cover is your load order. Broad in-game validation
+across SE, AE, and ENB 0.504 is ahead of this release, not behind it. The
+plugin is written to fail quietly rather than loudly, so a tracker that throws
+is disabled and retried instead of taking the frame down, and every published
+value defaults to zero when the plugin is idle. Report anything that misbehaves
+and include your log.
 
 [size=4]Source and license[/size]
 
