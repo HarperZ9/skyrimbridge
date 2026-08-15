@@ -23,8 +23,9 @@ ROOT = Path(__file__).resolve().parents[1]
 VERSION = "3.0.0"
 ARCHIVE_NAME = f"SkyrimBridge-{VERSION}.zip"
 
-EXPECTED_PAYLOAD = {
+EXPECTED_DOCS = {
     "CHANGELOG.md",
+    "CREDITS.md",
     "GPU.md",
     "LICENSE",
     "README.md",
@@ -34,15 +35,21 @@ EXPECTED_PAYLOAD = {
     "VALIDATION-PROTOCOL.md",
     "parameters.md",
 }
-EXPECTED_PAYLOAD = {f"Docs/{name}" for name in EXPECTED_PAYLOAD} | {
+
+# Configs owned by the native replacement suite. Present only in a build that
+# has the suite; a distributable build ships no code that reads them.
+NATIVE_SUITE_PAYLOAD = {
+    "SKSE/Plugins/SkyrimBridge/Sky.ini",
+    "SKSE/Plugins/SkyrimBridge/WeatherRouting.example.ini",
+}
+
+BASE_PAYLOAD = {f"Docs/{name}" for name in EXPECTED_DOCS} | {
     "Optional-GPU-Proxy/READ-ME.txt",
     "Optional-GPU-Proxy/d3d11.dll",
     "SKSE/Plugins/SkyrimBridge.dll",
     "SKSE/Plugins/SkyrimBridge/GPU.ini",
-    "SKSE/Plugins/SkyrimBridge/Sky.ini",
     "SKSE/Plugins/SkyrimBridge/SkyrimBridge.ini",
     "SKSE/Plugins/SkyrimBridge/WeatherParams.ini",
-    "SKSE/Plugins/SkyrimBridge/WeatherRouting.example.ini",
     "SKSE/Plugins/SkyrimBridge/WriteBackConfig.ini",
     "Shaders/SkyrimBridge.fxh",
     "Shaders/SkyrimBridge_CB.fxh",
@@ -52,7 +59,12 @@ EXPECTED_PAYLOAD = {f"Docs/{name}" for name in EXPECTED_PAYLOAD} | {
     "Tools/sb_command_client.py",
     "Tools/sb_smoke_tour.py",
 }
-EXPECTED_ARCHIVE = EXPECTED_PAYLOAD | {"MANIFEST.json"}
+
+
+def expected_payload(has_native_suite: bool) -> set[str]:
+    """The archive contents depend on which build is being packaged."""
+    return BASE_PAYLOAD | (NATIVE_SUITE_PAYLOAD if has_native_suite else set())
+
 
 
 def sha256(data: bytes) -> str:
@@ -107,10 +119,15 @@ def main() -> int:
             assert sidecar.read_text(encoding="ascii") == expected_sidecar
 
         with zipfile.ZipFile(archive_a) as release_zip:
+            plugin_bytes = release_zip.read("SKSE/Plugins/SkyrimBridge.dll")
+            has_native_suite = NATIVE_SUITE_MARKERS[0] in plugin_bytes
+            expected_files = expected_payload(has_native_suite)
+
             names = release_zip.namelist()
-            assert names == sorted(EXPECTED_ARCHIVE), (
+            assert names == sorted(expected_files | {"MANIFEST.json"}), (
                 "archive manifest mismatch:\n"
-                f"expected={sorted(EXPECTED_ARCHIVE)!r}\nactual={names!r}"
+                f"expected={sorted(expected_files | {'MANIFEST.json'})!r}\n"
+                f"actual={names!r}"
             )
             assert len(names) == len(set(names)), "archive contains duplicate paths"
             assert all(not name.startswith("/") for name in names)
@@ -121,7 +138,7 @@ def main() -> int:
             assert manifest["package"] == "SkyrimBridge"
             assert manifest["version"] == VERSION
             entries = manifest["files"]
-            assert [entry["path"] for entry in entries] == sorted(EXPECTED_PAYLOAD)
+            assert [entry["path"] for entry in entries] == sorted(expected_files)
 
             for entry in entries:
                 payload = release_zip.read(entry["path"])
@@ -133,9 +150,10 @@ def main() -> int:
 
             check_no_native_replacements(release_zip)
 
+    kind = "private" if has_native_suite else "distributable"
     print(
         "PASS: deterministic public release package "
-        f"({len(EXPECTED_PAYLOAD)} payload files + manifest)"
+        f"({len(expected_files)} payload files + manifest, {kind} build)"
     )
     return 0
 

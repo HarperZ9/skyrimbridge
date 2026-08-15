@@ -38,6 +38,17 @@ CONFIG_FILES = (
     "WeatherRouting.example.ini",
 )
 
+# Configs owned by the Kitsuune-derived native replacement suite. A build made
+# with SKYRIMBRIDGE_NATIVE_REPLACEMENTS=OFF has no code that reads these, so
+# shipping them would hand the user settings for features the binary does not
+# have. See CREDITS.md.
+NATIVE_SUITE_CONFIGS = frozenset({"Sky.ini", "WeatherRouting.example.ini"})
+
+# The marker used to decide which kind of build is being packaged. Read from the
+# compiled bytes rather than from a CMake variable, so the archive contents can
+# never disagree with the binary they ship beside.
+NATIVE_SUITE_MARKER = b"SkyLighting"
+
 PUBLIC_FILES = (
     ("README.md", "Docs/README.md"),
     ("CHANGELOG.md", "Docs/CHANGELOG.md"),
@@ -146,7 +157,13 @@ def assemble_stage(root: Path, build_dir: Path, stage: Path, version: str) -> li
     validate_x64_pe(proxy, "GPU proxy")
 
     copy_payload(plugin, stage, "SKSE/Plugins/SkyrimBridge.dll")
-    for name in CONFIG_FILES:
+
+    has_native_suite = NATIVE_SUITE_MARKER in plugin.read_bytes()
+    configs = [
+        name for name in CONFIG_FILES
+        if has_native_suite or name not in NATIVE_SUITE_CONFIGS
+    ]
+    for name in configs:
         copy_payload(
             root / "config" / name,
             stage,
@@ -154,6 +171,10 @@ def assemble_stage(root: Path, build_dir: Path, stage: Path, version: str) -> li
         )
     for source, destination in PUBLIC_FILES:
         copy_payload(root / Path(source), stage, destination)
+
+    # THIRD_PARTY_NOTICES.md points at CREDITS.md for the Kitsuune attribution,
+    # so the two ship together or the notices reference a file that is not there.
+    copy_payload(root / "CREDITS.md", stage, "Docs/CREDITS.md")
     copy_payload(proxy, stage, "Optional-GPU-Proxy/d3d11.dll")
 
     proxy_readme = checked_destination(stage, "Optional-GPU-Proxy/READ-ME.txt")
