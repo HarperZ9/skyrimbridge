@@ -17,6 +17,7 @@ namespace SB::Api
         SB::AllData           g_snapshots[2]{};
         std::atomic<uint32_t> g_publishedSlot{0};
         uint64_t              g_publishedFrameIndex = 0;
+        bool                  g_teardownLatched = false;
 
         uint64_t GetFrameIndexImpl()
         {
@@ -25,12 +26,16 @@ namespace SB::Api
 
         const SB::AllData* GetFrameDataImpl()
         {
+            thread_local SB::AllData callerSnapshot{};
+
+            std::lock_guard lock(g_snapshotMutex);
             if (!g_frameValid.load(std::memory_order_acquire)) {
                 return nullptr;
             }
 
             const uint32_t slot = g_publishedSlot.load(std::memory_order_acquire);
-            return &g_snapshots[slot];
+            callerSnapshot = g_snapshots[slot];
+            return &callerSnapshot;
         }
 
         bool IsFrameValidImpl()
@@ -70,6 +75,9 @@ namespace SB::Api
     void MarkFramePublished(const SB::AllData& publishedData)
     {
         std::lock_guard lock(g_snapshotMutex);
+        if (g_teardownLatched) {
+            return;
+        }
 
         const uint32_t currentSlot = g_publishedSlot.load(std::memory_order_relaxed);
         const uint32_t nextSlot = 1U - currentSlot;
@@ -83,6 +91,8 @@ namespace SB::Api
 
     void MarkTeardown()
     {
+        std::lock_guard lock(g_snapshotMutex);
+        g_teardownLatched = true;
         g_frameValid.store(false, std::memory_order_release);
     }
 }

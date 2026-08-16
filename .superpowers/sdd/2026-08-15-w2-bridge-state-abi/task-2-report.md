@@ -133,7 +133,7 @@ MSBuild version 18.0.5+e22287bf1 for .NET Framework
   BridgeApi.cpp
      Creating library C:/dev/skyrimbridge-worktrees/bridge-state-abi/build/Release/SkyrimBridge.lib and object C:/dev/skyrimbridge-worktrees/bridge-state-abi/build/Release/SkyrimBridge.exp
   SkyrimBridge.vcxproj -> C:\dev\skyrimbridge-worktrees\bridge-state-abi\build\Release\SkyrimBridge.dll
-  	Copying config files to build directory
+    Copying config files to build directory
 ```
 
 Built artifact:

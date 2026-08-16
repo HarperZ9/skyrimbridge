@@ -34,6 +34,10 @@ def normalize(text: str) -> str:
     return re.sub(r"\s+", " ", strip_comments(text)).strip()
 
 
+def collapse_whitespace(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def function_body(code: str, signature_re: str) -> str | None:
     match = re.search(signature_re, code)
     if not match:
@@ -112,6 +116,7 @@ def check_source() -> list[str]:
             "coherent frame index storage exists": (
                 r"(?:std::)?uint64_t\s+g_publishedFrameIndex\s*=\s*0\s*;"
             ),
+            "mutex-protected teardown latch starts false": r"bool\s+g_teardownLatched\s*=\s*false\s*;",
         }
         for label, pattern in patterns.items():
             if not re.search(pattern, bridge_code):
@@ -136,6 +141,10 @@ def check_source() -> list[str]:
         if get_data is None:
             failures.append("GetFrameDataImpl is missing")
         else:
+            if not re.search(r"thread_local\s+SB::AllData\s+callerSnapshot\s*\{\s*\}\s*;", get_data):
+                failures.append("GetFrameDataImpl must use a thread-local caller snapshot")
+            if not re.search(r"std::lock_guard(?:\s*<[^>]+>)?\s+\w+\s*\(\s*g_snapshotMutex\s*\)", get_data):
+                failures.append("GetFrameDataImpl must lock g_snapshotMutex before copying a snapshot")
             if "nullptr" not in get_data or not re.search(
                 r"g_frameValid\.load\s*\(\s*std::memory_order_acquire\s*\)",
                 get_data,
@@ -143,8 +152,12 @@ def check_source() -> list[str]:
                 failures.append("GetFrameDataImpl must return nullptr when no frame is valid")
             if not re.search(r"g_publishedSlot\.load\s*\(\s*std::memory_order_acquire\s*\)", get_data):
                 failures.append("GetFrameDataImpl must acquire-load the published slot")
-            if not re.search(r"return\s+&\s*g_snapshots\s*\[\s*slot\s*\]\s*;", get_data):
-                failures.append("GetFrameDataImpl must return a published snapshot buffer")
+            if re.search(r"return\s+&\s*g_snapshots\s*\[", get_data):
+                failures.append("GetFrameDataImpl must not return a shared publisher snapshot slot")
+            if not re.search(r"callerSnapshot\s*=\s*g_snapshots\s*\[\s*slot\s*\]\s*;", get_data):
+                failures.append("GetFrameDataImpl must copy the published snapshot into callerSnapshot")
+            if not re.search(r"return\s+&\s*callerSnapshot\s*;", get_data):
+                failures.append("GetFrameDataImpl must return the thread-local caller snapshot")
 
         copy_data = function_body(
             bridge_code,
@@ -200,7 +213,11 @@ def check_source() -> list[str]:
             publish_one_line = normalize(publish)
             if not re.search(r"std::lock_guard(?:\s*<[^>]+>)?\s+\w+\s*\(\s*g_snapshotMutex\s*\)", publish):
                 failures.append("MarkFramePublished must lock g_snapshotMutex")
+            teardown_guard = "if (g_teardownLatched) { return; }"
+            if teardown_guard not in publish_one_line:
+                failures.append("MarkFramePublished must no-op after teardown is latched")
             required_order = [
+                teardown_guard,
                 "g_snapshots[nextSlot] = publishedData;",
                 "g_publishedSlot.store(nextSlot, std::memory_order_release);",
                 "++g_publishedFrameIndex;",
@@ -219,8 +236,20 @@ def check_source() -> list[str]:
         teardown = function_body(bridge_code, r"void\s+MarkTeardown\s*\(\s*\)")
         if teardown is None:
             failures.append("MarkTeardown() is missing")
-        elif not re.search(r"g_frameValid\.store\s*\(\s*false\s*,\s*std::memory_order_release\s*\)", teardown):
-            failures.append("MarkTeardown must release-store frame validity false")
+        else:
+            teardown_one_line = normalize(teardown)
+            if not re.search(r"std::lock_guard(?:\s*<[^>]+>)?\s+\w+\s*\(\s*g_snapshotMutex\s*\)", teardown):
+                failures.append("MarkTeardown must lock g_snapshotMutex")
+            latch = "g_teardownLatched = true;"
+            invalidate = "g_frameValid.store(false, std::memory_order_release);"
+            latch_pos = teardown_one_line.find(latch)
+            invalidate_pos = teardown_one_line.find(invalidate)
+            if latch_pos < 0:
+                failures.append("MarkTeardown must latch teardown state")
+            if invalidate_pos < 0:
+                failures.append("MarkTeardown must release-store frame validity false")
+            if latch_pos >= 0 and invalidate_pos >= 0 and latch_pos > invalidate_pos:
+                failures.append("MarkTeardown must latch teardown before invalidating")
 
         exported = function_body(
             bridge_code,
@@ -235,8 +264,16 @@ def check_source() -> list[str]:
     if not HEADER.is_file():
         failures.append(f"public ABI header is absent: {HEADER}")
     else:
-        header_code = strip_comments(HEADER.read_text(encoding="utf-8"))
-        if "Internal. Called by the publish path, not by consumers." not in HEADER.read_text(encoding="utf-8"):
+        header_text = HEADER.read_text(encoding="utf-8")
+        header_one_line = collapse_whitespace(re.sub(r"//\s*", "", header_text))
+        header_code = strip_comments(header_text)
+        if "thread-local" not in header_one_line:
+            failures.append("header must document GetFrameData's thread-local snapshot lifetime")
+        if "until the next GetFrameData call on that thread or thread exit" not in header_one_line:
+            failures.append("header must document the exact GetFrameData pointer lifetime")
+        if "matching frame index" not in header_one_line:
+            failures.append("header must recommend CopyFrameData when consumers need a matching frame index")
+        if "Internal. Called by the publish path, not by consumers." not in header_text:
             failures.append("internal lifecycle declarations must be marked as producer-only")
         if not re.search(
             r"void\s+MarkFramePublished\s*\(\s*const\s+SB::AllData\s*&\s*publishedData\s*\)\s*;",

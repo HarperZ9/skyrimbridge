@@ -45,9 +45,10 @@ namespace SB::Api
         // this to tell a fresh frame from a repeat without diffing the block.
         uint64_t (*GetFrameIndex)();
 
-        // Points at the live state block. Valid only while IsFrameValid()
-        // returns true and only on the thread that published it. Never freed
-        // by the caller.
+        // Returns a pointer to a thread-local copy of the latest published
+        // snapshot. Lifetime: same thread, until the next GetFrameData call on
+        // that thread or thread exit. Prefer CopyFrameData when a matching
+        // frame index, cross-thread, or long-lived copy is needed.
         const SB::AllData* (*GetFrameData)();
 
         // False before the first publish, and after teardown has begun.
