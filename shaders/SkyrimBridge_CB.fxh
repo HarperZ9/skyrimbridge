@@ -57,7 +57,7 @@ float4 SB_Fog_Height          < string UIName = "SB_Fog_Height";          string
 float4 SB_Wind                < string UIName = "SB_Wind";                string UIWidget = "Color"; int UIHidden = 1; >; // .x = speed [0,1], .y = direction (radians)
 float4 SB_Precipitation       < string UIName = "SB_Precipitation";       string UIWidget = "Color"; int UIHidden = 1; >; // .x = type (0=none,1=rain,2=snow), .y = intensity [0,1]
 float4 SB_Lightning           < string UIName = "SB_Lightning";           string UIWidget = "Color"; int UIHidden = 1; >; // .x = frequency, .y = isFlashing(0/1), .z = flashIntensity, .w = timeSinceFlash(sec)
-float4 SB_Weather_Flags       < string UIName = "SB_Weather_Flags";       string UIWidget = "Color"; int UIHidden = 1; >; // .x = packed uint bitfield (bit0=pleasant,1=cloudy,2=rainy,3=snowy), .yzw = reserved
+float4 SB_Weather_Flags       < string UIName = "SB_Weather_Flags";       string UIWidget = "Color"; int UIHidden = 1; >; // .x = isPleasant(0/1), .y = isCloudy(0/1), .z = isRainy(0/1), .w = isSnowy(0/1)
 float4 SB_Weather_Transition  < string UIName = "SB_Weather_Transition";  string UIWidget = "Color"; int UIHidden = 1; >; // .x = transition% [0,1], .y = outgoingWeatherID, .z = currentWeatherID
 float4 SB_Precip_Surface      < string UIName = "SB_Precip_Surface";      string UIWidget = "Color"; int UIHidden = 1; >; // .x = surface wetness [0,1], .y = puddle depth, .z = snow accumulation
 float4 SB_Wind_Live           < string UIName = "SB_Wind_Live";           string UIWidget = "Color"; int UIHidden = 1; >; // .x = Sky::windSpeed, .y = windAngle (rad), .z = windDirX (cos), .w = windDirZ (sin)
@@ -87,7 +87,7 @@ float4 SB_PrevView_Row0       < string UIName = "SB_PrevView_Row0";       string
 float4 SB_PrevView_Row1       < string UIName = "SB_PrevView_Row1";       string UIWidget = "Color"; int UIHidden = 1; >; // .xyz = prev up vector (derive Row2 via cross)
 
 // ---- 7. Interior (7 float4s) ----
-float4 SB_Interior_Flags      < string UIName = "SB_Interior_Flags";      string UIWidget = "Color"; int UIHidden = 1; >; // .x = packed uint bitfield (bit0=isInterior,1=hasLightingTemplate), .yzw = reserved
+float4 SB_Interior_Flags      < string UIName = "SB_Interior_Flags";      string UIWidget = "Color"; int UIHidden = 1; >; // .x = isInterior(0/1), .y = hasLightingTemplate(0/1), .z = 0, .w = 0
 float4 SB_Interior_Ambient    < string UIName = "SB_Interior_Ambient";    string UIWidget = "Color"; int UIHidden = 1; >; // .rgb = interior ambient, .a = intensity
 float4 SB_Interior_DirColor   < string UIName = "SB_Interior_DirColor";   string UIWidget = "Color"; int UIHidden = 1; >; // .rgb = interior directional light, .a = fade
 float4 SB_Interior_DirDir     < string UIName = "SB_Interior_DirDir";     string UIWidget = "Color"; int UIHidden = 1; >; // .xyz = interior light direction
@@ -101,10 +101,10 @@ float4 SB_Shadow_Diffuse      < string UIName = "SB_Shadow_Diffuse";      string
 float4 SB_Shadow_Ambient      < string UIName = "SB_Shadow_Ambient";      string UIWidget = "Color"; int UIHidden = 1; >; // .rgb = shadow caster ambient color
 
 // ---- 9. Effects (4 float4s) ----
-float4 SB_FX_Vision           < string UIName = "SB_FX_Vision";           string UIWidget = "Color"; int UIHidden = 1; >; // .x = packed uint bitfield (bit0=nightEye,1=detectLife,2=detectDead,3=ethereal), .yzw = reserved
+float4 SB_FX_Vision           < string UIName = "SB_FX_Vision";           string UIWidget = "Color"; int UIHidden = 1; >; // .x = nightEye(0/1), .y = detectLife(0/1), .z = detectDead(0/1), .w = etherealForm(0/1)
 float4 SB_FX_Time             < string UIName = "SB_FX_Time";             string UIWidget = "Color"; int UIHidden = 1; >; // .x = slowTimeFactor, .y = isTimeStopped
-float4 SB_FX_Damage           < string UIName = "SB_FX_Damage";           string UIWidget = "Color"; int UIHidden = 1; >; // .x = packed uint bitfield (bit0=fire,1=frost,2=shock,3=poison), .yzw = reserved
-float4 SB_FX_Misc             < string UIName = "SB_FX_Misc";             string UIWidget = "Color"; int UIHidden = 1; >; // .x = packed uint bitfield (bit0=invisible,1=paralyzed,2=drunk), .yzw = reserved
+float4 SB_FX_Damage           < string UIName = "SB_FX_Damage";           string UIWidget = "Color"; int UIHidden = 1; >; // .x = fire(0/1), .y = frost(0/1), .z = shock(0/1), .w = poison(0/1)
+float4 SB_FX_Misc             < string UIName = "SB_FX_Misc";             string UIWidget = "Color"; int UIHidden = 1; >; // .x = invisible(0/1), .y = paralyzed(0/1), .z = drunk(0/1), .w = 0
 
 // ---- 10. Render State (3 float4s) ----
 // DepthParams removed — use SB_LinearizeDepth() which derives from Camera_Params
@@ -148,16 +148,16 @@ float4 SB_XHair_Actor         < string UIName = "SB_XHair_Actor";         string
 float4 SB_Equip_Right         < string UIName = "SB_Equip_Right";         string UIWidget = "Color"; int UIHidden = 1; >; // .x = weaponType, .y = baseDamage, .z = isEnchanted(0/1), .w = enchantCharge [0,1]
 float4 SB_Equip_Left          < string UIName = "SB_Equip_Left";          string UIWidget = "Color"; int UIHidden = 1; >; // .x = itemType, .y = damage/armorRating, .z = isEnchanted(0/1), .w = isSpell(0/1)
 float4 SB_Equip_Armor         < string UIName = "SB_Equip_Armor";         string UIWidget = "Color"; int UIHidden = 1; >; // .x = totalArmorRating, .y = isWearingHeavy(0/1), .z = isWearingLight(0/1), .w = isWearingRobes(0/1)
-float4 SB_Equip_Flags         < string UIName = "SB_Equip_Flags";         string UIWidget = "Color"; int UIHidden = 1; >; // .x = packed uint bitfield (bit0=weaponDrawn,1=hasBow,2=hasTorch,3=twoHanding), .yzw = reserved
+float4 SB_Equip_Flags         < string UIName = "SB_Equip_Flags";         string UIWidget = "Color"; int UIHidden = 1; >; // .x = weaponDrawn(0/1), .y = hasBow(0/1), .z = hasTorch(0/1), .w = isTwoHanding(0/1)
 
 // ---- 16. Quest (2 float4s) ----
 float4 SB_Quest_Progress      < string UIName = "SB_Quest_Progress";      string UIWidget = "Color"; int UIHidden = 1; >; // .x = mainQuestStage, .y = totalQuestsCompleted, .z = activeQuestCount, .w = activeObjectiveCount
 float4 SB_Quest_Tracked       < string UIName = "SB_Quest_Tracked";       string UIWidget = "Color"; int UIHidden = 1; >; // .x = trackedQuestStage, .y = questType, .z = questFormID (low 16 bits), .w = hasObjectiveMarker(0/1)
 
 // ---- 17. UI State (3 float4s) ----
-float4 SB_UI_Menus            < string UIName = "SB_UI_Menus";            string UIWidget = "Color"; int UIHidden = 1; >; // .x = packed uint bitfield (bit0=inMenu,1=inDialogue,2=inInventory,3=inMap), .yzw = reserved
-float4 SB_UI_HUD              < string UIName = "SB_UI_HUD";              string UIWidget = "Color"; int UIHidden = 1; >; // .x = packed uint bitfield (bit0=hudVisible,1=crosshairVisible,2=cinematicMode,3=loading), .yzw = reserved
-float4 SB_UI_Detail           < string UIName = "SB_UI_Detail";           string UIWidget = "Color"; int UIHidden = 1; >; // .x = packed uint bitfield (bit0=crafting,1=book,2=lockpick,3=console), .yzw = reserved
+float4 SB_UI_Menus            < string UIName = "SB_UI_Menus";            string UIWidget = "Color"; int UIHidden = 1; >; // .x = isInMenu(0/1), .y = isInDialogue(0/1), .z = isInInventory(0/1), .w = isInMap(0/1)
+float4 SB_UI_HUD              < string UIName = "SB_UI_HUD";              string UIWidget = "Color"; int UIHidden = 1; >; // .x = isHUDVisible(0/1), .y = isCrosshairVisible(0/1), .z = isInCinematicMode(0/1), .w = isLoading(0/1)
+float4 SB_UI_Detail           < string UIName = "SB_UI_Detail";           string UIWidget = "Color"; int UIHidden = 1; >; // .x = isInCrafting(0/1), .y = isInBook(0/1), .z = isInLockpick(0/1), .w = isInConsole(0/1)
 
 // ---- 18. Computed Feedback (6 float4s) ----
 // GPU read-back from previous frame (1-frame delay)
@@ -224,71 +224,17 @@ float4 SB_Effect_Color        < string UIName = "SB_Effect_Color";        string
 float4 SB_Theme_Config        < string UIName = "SB_Theme_Config";        string UIWidget = "Color"; int UIHidden = 1; >; // .x = theme index synced across all shaders
 
 //-----------------------------------------------------------------------------
-//  Bitfield extraction macros
+//  Packed player combat flag constants
 //
-//  Pure-flag float4s store all flags as bits in .x via asuint().
-//  SB_HAS_FLAG returns bool, SB_FLAG_TO_FLOAT returns 0.0/1.0 for multipliers.
+//  SB_Player_Combat.x remains the packed combat field documented by BridgeData.h.
+//  Weather, interior, effects, equipment, and UI flags are scalar float4 lanes.
 //-----------------------------------------------------------------------------
-
-#define SB_HAS_FLAG(field, bit)       ((asuint(field) & (bit)) != 0)
-#define SB_FLAG_TO_FLOAT(field, bit)  (SB_HAS_FLAG(field, bit) ? 1.0 : 0.0)
-
-// -- Weather flags (SB_Weather_Flags.x) --
-#define SB_WFLAG_PLEASANT   (1u << 0)
-#define SB_WFLAG_CLOUDY     (1u << 1)
-#define SB_WFLAG_RAINY      (1u << 2)
-#define SB_WFLAG_SNOWY      (1u << 3)
 
 // -- Player combat flags (SB_Player_Combat.x) --
 #define SB_PFLAG_IN_COMBAT     (1u << 0)
 #define SB_PFLAG_BLEEDOUT      (1u << 1)
 #define SB_PFLAG_KILLMOVE      (1u << 2)
 #define SB_PFLAG_WEAPON_DRAWN  (1u << 3)
-
-// -- Interior flags (SB_Interior_Flags.x) --
-#define SB_IFLAG_IS_INTERIOR       (1u << 0)
-#define SB_IFLAG_HAS_LIGHTING_TPL  (1u << 1)
-
-// -- Vision FX flags (SB_FX_Vision.x) --
-#define SB_VFLAG_NIGHT_EYE    (1u << 0)
-#define SB_VFLAG_DETECT_LIFE  (1u << 1)
-#define SB_VFLAG_DETECT_DEAD  (1u << 2)
-#define SB_VFLAG_ETHEREAL     (1u << 3)
-
-// -- Damage FX flags (SB_FX_Damage.x) --
-#define SB_DFLAG_FIRE    (1u << 0)
-#define SB_DFLAG_FROST   (1u << 1)
-#define SB_DFLAG_SHOCK   (1u << 2)
-#define SB_DFLAG_POISON  (1u << 3)
-
-// -- Misc FX flags (SB_FX_Misc.x) --
-#define SB_MFLAG_INVISIBLE  (1u << 0)
-#define SB_MFLAG_PARALYZED  (1u << 1)
-#define SB_MFLAG_DRUNK      (1u << 2)
-
-// -- Equipment flags (SB_Equip_Flags.x) --
-#define SB_EFLAG_WEAPON_DRAWN  (1u << 0)
-#define SB_EFLAG_HAS_BOW       (1u << 1)
-#define SB_EFLAG_HAS_TORCH     (1u << 2)
-#define SB_EFLAG_TWO_HANDING   (1u << 3)
-
-// -- UI Menu flags (SB_UI_Menus.x) --
-#define SB_UFLAG_IN_MENU       (1u << 0)
-#define SB_UFLAG_IN_DIALOGUE   (1u << 1)
-#define SB_UFLAG_IN_INVENTORY  (1u << 2)
-#define SB_UFLAG_IN_MAP        (1u << 3)
-
-// -- UI HUD flags (SB_UI_HUD.x) --
-#define SB_UFLAG_HUD_VISIBLE        (1u << 0)
-#define SB_UFLAG_CROSSHAIR_VISIBLE  (1u << 1)
-#define SB_UFLAG_CINEMATIC_MODE     (1u << 2)
-#define SB_UFLAG_LOADING            (1u << 3)
-
-// -- UI Detail flags (SB_UI_Detail.x) --
-#define SB_UFLAG_CRAFTING   (1u << 0)
-#define SB_UFLAG_BOOK       (1u << 1)
-#define SB_UFLAG_LOCKPICK   (1u << 2)
-#define SB_UFLAG_CONSOLE    (1u << 3)
 
 
 //-----------------------------------------------------------------------------
@@ -476,18 +422,18 @@ float2 SB_SecundaScreenUV(float4x4 vp){ return SB_DirectionToScreenUV(SB_Secunda
 bool SB_IsNight() { return SB_Time.x < SB_Time.y || SB_Time.x > SB_Time.z; }
 
 // Menu/UI state helpers (used by adaptation and DOF shaders)
-bool SB_IsInMenu()         { return SB_HAS_FLAG(SB_UI_Menus.x, SB_UFLAG_IN_MENU); }
-bool SB_IsInDialogue()     { return SB_HAS_FLAG(SB_UI_Menus.x, SB_UFLAG_IN_DIALOGUE); }
-bool SB_IsLoading()        { return SB_HAS_FLAG(SB_UI_HUD.x, SB_UFLAG_LOADING); }
-bool SB_HasTorchEquipped() { return SB_HAS_FLAG(SB_Equip_Flags.x, SB_EFLAG_HAS_TORCH); }
+bool SB_IsInMenu()         { return SB_UI_Menus.x > 0.5; }
+bool SB_IsInDialogue()     { return SB_UI_Menus.y > 0.5; }
+bool SB_IsLoading()        { return SB_UI_HUD.w > 0.5; }
+bool SB_HasTorchEquipped() { return SB_Equip_Flags.z > 0.5; }
 
 // Weather flag helpers (bool + float versions for multiplier use)
-bool  SB_IsRaining()  { return SB_HAS_FLAG(SB_Weather_Flags.x, SB_WFLAG_RAINY); }
-bool  SB_IsSnowing()  { return SB_HAS_FLAG(SB_Weather_Flags.x, SB_WFLAG_SNOWY); }
-float SB_RainFlag()   { return SB_FLAG_TO_FLOAT(SB_Weather_Flags.x, SB_WFLAG_RAINY); }
-float SB_SnowFlag()   { return SB_FLAG_TO_FLOAT(SB_Weather_Flags.x, SB_WFLAG_SNOWY); }
-float SB_InteriorFlag() { return SB_FLAG_TO_FLOAT(SB_Interior_Flags.x, SB_IFLAG_IS_INTERIOR); }
-bool  SB_IsInterior()   { return SB_HAS_FLAG(SB_Interior_Flags.x, SB_IFLAG_IS_INTERIOR); }
+bool  SB_IsRaining()  { return SB_Weather_Flags.z > 0.5; }
+bool  SB_IsSnowing()  { return SB_Weather_Flags.w > 0.5; }
+float SB_RainFlag()   { return SB_Weather_Flags.z; }
+float SB_SnowFlag()   { return SB_Weather_Flags.w; }
+float SB_InteriorFlag() { return SB_Interior_Flags.x; }
+bool  SB_IsInterior()   { return SB_Interior_Flags.x > 0.5; }
 
 // Feedback helpers (1-frame delayed GPU read-back)
 bool SB_HasFeedback()       { return SB_Computed_Scene.w > 0.5; }

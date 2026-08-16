@@ -1,6 +1,5 @@
 #include "EffectsTracker.h"
 #include <RE/Skyrim.h>
-#include <bit>
 
 namespace SB::EffectsTracker
 {
@@ -24,10 +23,18 @@ namespace SB::EffectsTracker
         if (!activeEffects)
             return data;
 
-        // Accumulate flags into uint bitfields
-        uint32_t visionBits = 0;
-        uint32_t damageBits = 0;
-        uint32_t miscBits   = 0;
+        // Accumulate public scalar flag components.
+        bool hasNightEye     = false;
+        bool hasDetectLife   = false;
+        bool hasDetectDead   = false;
+        bool hasEthereal     = false;
+        bool hasFireDamage   = false;
+        bool hasFrostDamage  = false;
+        bool hasShockDamage  = false;
+        bool hasPoisonDamage = false;
+        bool hasInvisibility = false;
+        bool hasParalysis    = false;
+        bool hasDrunk        = false;
 
         for (auto* ae : *activeEffects) {
             if (!ae || ae->flags.any(RE::ActiveEffect::Flag::kInactive))
@@ -42,11 +49,11 @@ namespace SB::EffectsTracker
 
             // ── Vision effects ──────────────────────────────────────────
             if (archetype == AT::kNightEye)
-                visionBits |= (1u << 0);
+                hasNightEye = true;
             if (archetype == AT::kDetectLife)
-                visionBits |= (1u << 1);
+                hasDetectLife = true;
             if (archetype == AT::kEtherealize)
-                visionBits |= (1u << 3);
+                hasEthereal = true;
 
             // ── Time effects ────────────────────────────────────────────
             if (archetype == AT::kSlowTime) {
@@ -59,37 +66,36 @@ namespace SB::EffectsTracker
                 if (av == RE::ActorValue::kHealth) {
                     auto resist = effect->data.resistVariable;
                     if (resist == RE::ActorValue::kResistFire)
-                        damageBits |= (1u << 0);
+                        hasFireDamage = true;
                     else if (resist == RE::ActorValue::kResistFrost)
-                        damageBits |= (1u << 1);
+                        hasFrostDamage = true;
                     else if (resist == RE::ActorValue::kResistShock)
-                        damageBits |= (1u << 2);
+                        hasShockDamage = true;
                     else if (resist == RE::ActorValue::kPoisonResist)
-                        damageBits |= (1u << 3);
+                        hasPoisonDamage = true;
                 }
             }
 
             // ── Misc effects ────────────────────────────────────────────
             if (archetype == AT::kInvisibility)
-                miscBits |= (1u << 0);
+                hasInvisibility = true;
             if (archetype == AT::kParalysis)
-                miscBits |= (1u << 1);
+                hasParalysis = true;
         }
 
-        // Pack bitfields into .x, zero .yzw
-        data.VisionEffects.x = std::bit_cast<float>(visionBits);
-        data.VisionEffects.y = 0.0f;
-        data.VisionEffects.z = 0.0f;
-        data.VisionEffects.w = 0.0f;
+        data.VisionEffects.x = hasNightEye ? 1.0f : 0.0f;
+        data.VisionEffects.y = hasDetectLife ? 1.0f : 0.0f;
+        data.VisionEffects.z = hasDetectDead ? 1.0f : 0.0f;
+        data.VisionEffects.w = hasEthereal ? 1.0f : 0.0f;
 
-        data.DamageEffects.x = std::bit_cast<float>(damageBits);
-        data.DamageEffects.y = 0.0f;
-        data.DamageEffects.z = 0.0f;
-        data.DamageEffects.w = 0.0f;
+        data.DamageEffects.x = hasFireDamage ? 1.0f : 0.0f;
+        data.DamageEffects.y = hasFrostDamage ? 1.0f : 0.0f;
+        data.DamageEffects.z = hasShockDamage ? 1.0f : 0.0f;
+        data.DamageEffects.w = hasPoisonDamage ? 1.0f : 0.0f;
 
-        data.MiscEffects.x = std::bit_cast<float>(miscBits);
-        data.MiscEffects.y = 0.0f;
-        data.MiscEffects.z = 0.0f;
+        data.MiscEffects.x = hasInvisibility ? 1.0f : 0.0f;
+        data.MiscEffects.y = hasParalysis ? 1.0f : 0.0f;
+        data.MiscEffects.z = hasDrunk ? 1.0f : 0.0f;
         data.MiscEffects.w = 0.0f;
 
         return data;

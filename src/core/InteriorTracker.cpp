@@ -1,6 +1,5 @@
 #include "InteriorTracker.h"
 #include <RE/Skyrim.h>
-#include <bit>
 #include <cmath>
 
 namespace SB::InteriorTracker
@@ -40,12 +39,10 @@ namespace SB::InteriorTracker
         // ── Interior lighting data ─────────────────────────────────────────
         auto* ld = cell->GetLighting();
 
-        // Pack interior flags into uint bitfield
-        uint32_t flagBits = 0;
-        flagBits |= (1u << 0);  // bit0: isInterior
-        if (ld) flagBits |= (1u << 1);  // bit1: hasLightingTemplate
-        data.IsInterior.x = std::bit_cast<float>(flagBits);
-        data.IsInterior.y = 0.0f;
+        // ── Interior flags (public scalar components) ──────────────────
+        bool hasLightingTemplate = ld != nullptr;
+        data.IsInterior.x = isInterior ? 1.0f : 0.0f;
+        data.IsInterior.y = hasLightingTemplate ? 1.0f : 0.0f;
         data.IsInterior.z = 0.0f;
         data.IsInterior.w = 0.0f;
 

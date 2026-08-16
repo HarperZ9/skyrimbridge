@@ -1,6 +1,5 @@
 #include "WeatherTracker.h"
 #include <RE/Skyrim.h>
-#include <bit>
 #include <cmath>
 
 namespace SB::WeatherTracker
@@ -68,16 +67,13 @@ namespace SB::WeatherTracker
         data.Lightning.z = 0.f;  // flashIntensity
         data.Lightning.w = s_timeSinceFlash;
 
-        // ── Weather flags (packed uint bitfield) ──────────────────────
-        uint32_t flagBits = 0;
-        if (flags.any(RE::TESWeather::WeatherDataFlag::kPleasant)) flagBits |= (1u << 0);
-        if (flags.any(RE::TESWeather::WeatherDataFlag::kCloudy))   flagBits |= (1u << 1);
-        if (isRain) flagBits |= (1u << 2);
-        if (isSnow) flagBits |= (1u << 3);
-        data.Flags.x = std::bit_cast<float>(flagBits);
-        data.Flags.y = 0.0f;
-        data.Flags.z = 0.0f;
-        data.Flags.w = 0.0f;
+        // ── Weather flags (public scalar components) ──────────────────
+        bool isPleasant = flags.any(RE::TESWeather::WeatherDataFlag::kPleasant);
+        bool isCloudy   = flags.any(RE::TESWeather::WeatherDataFlag::kCloudy);
+        data.Flags.x = isPleasant ? 1.0f : 0.0f;
+        data.Flags.y = isCloudy ? 1.0f : 0.0f;
+        data.Flags.z = isRain ? 1.0f : 0.0f;
+        data.Flags.w = isSnow ? 1.0f : 0.0f;
 
         // ── Transition ──────────────────────────────────────────────────
         data.Transition.x = sky->currentWeatherPct;
