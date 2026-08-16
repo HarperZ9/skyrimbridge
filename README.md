@@ -32,6 +32,13 @@ SkyrimBridge is several tools in one plugin. Use only the parts you need.
 - A GPU tier with a physically based atmosphere renderer and raymarched
   volumetric clouds, for setups that chain a D3D11 proxy.
 
+**For non-ENB shader and framework authors**
+- In-process consumers can resolve `SB_GetBridgeInterface` from
+  `SkyrimBridge.dll` at runtime and read the published frame state through a
+  versioned ABI without linking against SkyrimBridge. Treat it as optional: if
+  the DLL, symbol, version, layout, or current frame is unavailable, fall back
+  to your own data path. See [docs/BRIDGE-ABI.md](docs/BRIDGE-ABI.md).
+
 **For record and worldspace editors**
 - EngineReflect reads any of 14 record types to a plain text file, lets you
   edit it, and writes it back with a round-trip check: image spaces, weathers
