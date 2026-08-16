@@ -13,11 +13,13 @@ import hashlib
 import json
 import argparse
 import configparser
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+import re
 import subprocess
 import struct
 import sys
 import tempfile
+from urllib.parse import unquote
 import zipfile
 
 
@@ -66,6 +68,11 @@ PROVENANCE_MARKER_DOCS = {
     "Docs/USER-GUIDE.md",
     "Docs/VALIDATION-PROTOCOL.md",
 }
+
+MARKDOWN_LINK_RE = re.compile(
+    r"(?<!!)\[[^\]\n]+\]\(([^)\s]+?\.md(?:#[^)]+)?)\)",
+    flags=re.IGNORECASE,
+)
 
 
 def sha256(data: bytes) -> str:
@@ -221,6 +228,7 @@ def main() -> int:
             check_no_native_replacements(release_zip)
             check_no_private_markers_outside_provenance(release_zip)
             check_public_runtime_defaults(release_zip)
+            check_markdown_links_resolve(release_zip)
 
     print(
         "PASS: deterministic public release package "
@@ -305,6 +313,43 @@ def check_public_runtime_defaults(release_zip: zipfile.ZipFile) -> None:
     assert value == "false", (
         "public SkyrimBridge.ini must ship engine-writing EngineFixes disabled; "
         f"got {value!r}"
+    )
+
+
+def resolve_zip_markdown_target(source: str, target: str) -> str:
+    target_path = unquote(target.split("#", 1)[0])
+    candidate = PurePosixPath(source).parent.joinpath(target_path)
+    parts: list[str] = []
+    for part in candidate.parts:
+        if part in ("", "."):
+            continue
+        if part == "..":
+            if parts:
+                parts.pop()
+            else:
+                parts.append(part)
+            continue
+        parts.append(part)
+    return "/".join(parts)
+
+
+def check_markdown_links_resolve(release_zip: zipfile.ZipFile) -> None:
+    """Every packaged local Markdown link must target a packaged Markdown file."""
+    names = set(release_zip.namelist())
+    failures = []
+    for info in release_zip.infolist():
+        if not info.filename.lower().endswith(".md"):
+            continue
+        text = release_zip.read(info.filename).decode("utf-8")
+        for match in MARKDOWN_LINK_RE.finditer(text):
+            target = match.group(1)
+            if "://" in target or target.startswith(("mailto:", "#", "/")):
+                continue
+            resolved = resolve_zip_markdown_target(info.filename, target)
+            if resolved not in names:
+                failures.append(f"{info.filename}: {target} -> {resolved}")
+    assert not failures, (
+        "packaged Markdown link targets are missing:\n" + "\n".join(failures)
     )
 
 

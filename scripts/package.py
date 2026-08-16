@@ -17,6 +17,7 @@ import argparse
 import hashlib
 import json
 import os
+import posixpath
 from pathlib import Path, PurePosixPath
 import re
 import shutil
@@ -74,6 +75,19 @@ PUBLIC_FILES = (
         "tools/blender/skyrimbridge_push.py",
         "Tools/blender/skyrimbridge_push.py",
     ),
+)
+
+PUBLIC_ARCHIVE_PATH_BY_SOURCE = {
+    PurePosixPath(source): PurePosixPath(destination)
+    for source, destination in PUBLIC_FILES
+}
+PUBLIC_ARCHIVE_PATH_BY_SOURCE[PurePosixPath("CREDITS.md")] = PurePosixPath(
+    "Docs/CREDITS.md"
+)
+
+MARKDOWN_LINK_RE = re.compile(
+    r"(?<!!)(\[[^\]\n]+\]\()([^)\s]+?\.md(?:#[^)]+)?)(\))",
+    flags=re.IGNORECASE,
 )
 
 GPU_PROXY_README = (
@@ -217,6 +231,76 @@ def write_public_text_payload(data: bytes, stage: Path, relative: str) -> None:
     destination.write_bytes(data)
 
 
+def normalize_posix_path(path: PurePosixPath) -> PurePosixPath:
+    parts: list[str] = []
+    for part in path.parts:
+        if part in ("", "."):
+            continue
+        if part == "..":
+            if parts:
+                parts.pop()
+            else:
+                parts.append(part)
+            continue
+        parts.append(part)
+    return PurePosixPath(*parts)
+
+
+def rewrite_markdown_links_for_archive(
+    text: str,
+    source_relative: str,
+    destination_relative: str,
+) -> str:
+    source_path = PurePosixPath(source_relative)
+    destination_path = PurePosixPath(destination_relative)
+    destination_dir = destination_path.parent
+
+    def replace(match: re.Match[str]) -> str:
+        prefix, target, suffix = match.groups()
+        if "://" in target or target.startswith(("mailto:", "#", "/")):
+            return match.group(0)
+
+        target_path, separator, anchor = target.partition("#")
+        resolved_source = normalize_posix_path(source_path.parent / target_path)
+        archive_target = PUBLIC_ARCHIVE_PATH_BY_SOURCE.get(resolved_source)
+        if archive_target is None:
+            return match.group(0)
+
+        rewritten = posixpath.relpath(
+            archive_target.as_posix(),
+            start=destination_dir.as_posix() or ".",
+        )
+        if separator:
+            rewritten = f"{rewritten}#{anchor}"
+        return f"{prefix}{rewritten}{suffix}"
+
+    return MARKDOWN_LINK_RE.sub(replace, text)
+
+
+def copy_public_payload(
+    source: Path,
+    stage: Path,
+    source_relative: str,
+    destination_relative: str,
+) -> None:
+    if not source.is_file():
+        raise FileNotFoundError(f"required release input not found: {source}")
+    if source.suffix.lower() != ".md":
+        copy_payload(source, stage, destination_relative)
+        return
+
+    rewritten = rewrite_markdown_links_for_archive(
+        source.read_text(encoding="utf-8"),
+        source_relative,
+        destination_relative,
+    )
+    write_public_text_payload(
+        rewritten.encode("utf-8"),
+        stage,
+        destination_relative,
+    )
+
+
 def assemble_stage(root: Path, build_dir: Path, stage: Path, version: str) -> list[str]:
     plugin = build_dir / "Release" / "SkyrimBridge.dll"
     proxy = build_dir / "Release" / "d3d11.dll"
@@ -233,7 +317,7 @@ def assemble_stage(root: Path, build_dir: Path, stage: Path, version: str) -> li
         else:
             copy_payload(root / "config" / name, stage, relative)
     for source, destination in PUBLIC_FILES:
-        copy_payload(root / Path(source), stage, destination)
+        copy_public_payload(root / Path(source), stage, source, destination)
 
     # THIRD_PARTY_NOTICES.md points at CREDITS.md for the Kitsuune attribution,
     # so the two ship together or the notices reference a file that is not there.
