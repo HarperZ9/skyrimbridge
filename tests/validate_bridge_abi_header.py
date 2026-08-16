@@ -91,9 +91,17 @@ REQUIRED_STATIC_ASSERTS = [
     ),
 ]
 
-EXPORT_DECLARATION = (
-    'extern "C" __declspec(dllexport) SB::Api::BridgeInterface* '
-    "SB_GetBridgeInterface();"
+EXPORT_DECLARATION_RE = (
+    r'extern\s+"C"\s+SB_BRIDGE_API\s+SB::Api::BridgeInterface\s*\*\s*'
+    r"SB_GetBridgeInterface\s*\(\s*\)\s*;"
+)
+
+EXPORT_MACRO_RE = (
+    r"#\s*if\s+defined\s*\(\s*SKYRIMBRIDGE_BUILDING_DLL\s*\)\s*"
+    r"#\s*define\s+SB_BRIDGE_API\s+__declspec\s*\(\s*dllexport\s*\)\s*"
+    r"#\s*else\s*"
+    r"#\s*define\s+SB_BRIDGE_API\s*(?:\r?\n)\s*"
+    r"#\s*endif"
 )
 
 
@@ -167,8 +175,30 @@ def main() -> int:
     if not re.search(r"\binline\s+constexpr\s+uint32_t\s+kBridgeInterfaceVersion\s*=\s*1U\s*;", code):
         failures.append("kBridgeInterfaceVersion must be inline constexpr uint32_t version 1U")
 
-    if EXPORT_DECLARATION not in code:
-        failures.append("the exported entry point declaration is missing or misspelled")
+    if not re.search(EXPORT_MACRO_RE, code):
+        failures.append(
+            "SB_BRIDGE_API must dllexport only when SKYRIMBRIDGE_BUILDING_DLL is defined "
+            "and expand empty for GetProcAddress consumers"
+        )
+
+    if "__declspec(dllimport)" in code:
+        failures.append("consumer inclusion must not force dllimport; consumers use GetProcAddress")
+
+    dllexport_uses = re.findall(r"__declspec\s*\(\s*dllexport\s*\)", code)
+    if len(dllexport_uses) != 1:
+        failures.append(
+            "dllexport must appear exactly once, inside the SB_BRIDGE_API producer macro"
+        )
+
+    if not re.search(EXPORT_DECLARATION_RE, code):
+        failures.append("the exported entry point must use extern C plus SB_BRIDGE_API")
+
+    if re.search(r'extern\s+"C"\s+__declspec\s*\(\s*dllexport\s*\)', code):
+        failures.append("the consumer-visible declaration must not hard-code dllexport")
+
+    for phrase in ["C++ header", "C-linkage symbol", "not a pure-C header"]:
+        if phrase not in text:
+            failures.append(f"missing public header documentation phrase: {phrase!r}")
 
     for label, pattern in REQUIRED_STATIC_ASSERTS:
         if not re.search(pattern, code):

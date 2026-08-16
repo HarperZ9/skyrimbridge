@@ -12,11 +12,20 @@
 //  A consumer must check both version and allDataSize before dereferencing
 //  GetFrameData, because a mismatched build has a different AllData layout.
 //  Prefer CopyFrameData for cross-thread or long-lived reads.
+//
+//  This is a C++ header exposing a C-linkage symbol for GetProcAddress
+//  consumers; it is not a pure-C header because the payload type is SB::AllData.
 //=============================================================================
 
 #include <stdint.h>
 
 #include "core/BridgeData.h"
+
+#if defined(SKYRIMBRIDGE_BUILDING_DLL)
+#  define SB_BRIDGE_API __declspec(dllexport)
+#else
+#  define SB_BRIDGE_API
+#endif
 
 namespace SB::Api
 {
@@ -64,4 +73,4 @@ namespace SB::Api
         "BridgeInterface must stay trivially copyable for the public ABI");
 }
 
-extern "C" __declspec(dllexport) SB::Api::BridgeInterface* SB_GetBridgeInterface();
+extern "C" SB_BRIDGE_API SB::Api::BridgeInterface* SB_GetBridgeInterface();

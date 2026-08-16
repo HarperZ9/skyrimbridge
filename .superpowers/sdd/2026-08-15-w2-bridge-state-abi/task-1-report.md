@@ -7,6 +7,7 @@
 - Owned files changed:
   - `include/SkyrimBridgeAPI.h`
   - `tests/validate_bridge_abi_header.py`
+  - `docs/superpowers/plans/2026-08-15-w2-bridge-state-abi.md`
   - `.superpowers/sdd/2026-08-15-w2-bridge-state-abi/task-1-report.md`
 
 ## Implementation
@@ -20,16 +21,32 @@
   5. `IsFrameValid`
   6. `CopyFrameData`
 - Appended `CopyFrameData(void* destination, uint32_t destinationSize, uint64_t* frameIndex)` after the plan's original fields.
-- Preserved C linkage/export spelling:
-  `extern "C" __declspec(dllexport) SB::Api::BridgeInterface* SB_GetBridgeInterface();`
+- Preserved C linkage while hiding producer export decoration behind
+  `SB_BRIDGE_API`:
+  `extern "C" SB_BRIDGE_API SB::Api::BridgeInterface* SB_GetBridgeInterface();`
+- Added `SKYRIMBRIDGE_BUILDING_DLL`/`SB_BRIDGE_API` so producer builds expand to
+  `__declspec(dllexport)` and consumer/GetProcAddress inclusion expands empty.
+- Documented that `SkyrimBridgeAPI.h` is a C++ header exposing a C-linkage
+  symbol, not a pure-C header.
 - Added compile-time ABI assertions for `SB::Float4`, `SB::AllData`, and `SB::Api::BridgeInterface` using compiler layout/copyability traits, without STL-bearing public signatures or exceptions.
 - Added a focused Python validator that enforces:
   - exact field order,
   - exact field signatures,
   - version 1 unsigned literal,
-  - export declaration spelling,
+  - producer-only export macro behavior,
+  - export declaration spelling through `SB_BRIDGE_API`,
+  - public C++/C-linkage/not-pure-C documentation,
   - required static assertions,
   - no STL includes or ABI-unsafe constructs in the public ABI header.
+- Updated Task 2 in `docs/superpowers/plans/2026-08-15-w2-bridge-state-abi.md`
+  so the future implementation:
+  - initializes all six v1 interface fields, including non-null
+    `&CopyFrameDataImpl`,
+  - publishes from a synchronized `SB::AllData` snapshot/double-buffer instead
+    of the mutating live `SB::GetMutableData()` block,
+  - requires tests for non-null callbacks and coherent copies,
+  - adds repository `include/` to the target include path,
+  - defines `SKYRIMBRIDGE_BUILDING_DLL` for the producer target.
 
 ## TDD evidence
 
@@ -109,6 +126,77 @@ validate_bridge_abi_header: all cases passed
 ```
 
 Both commands exited 0.
+
+## Review fix evidence
+
+Review base: `eaa0e2e`.
+
+### RED
+
+After adding validator checks for producer-only export macro behavior and
+C++/C-linkage documentation, the old header failed as expected:
+
+```text
+FAIL: SB_BRIDGE_API must dllexport only when SKYRIMBRIDGE_BUILDING_DLL is defined and expand empty for GetProcAddress consumers
+FAIL: the exported entry point must use extern C plus SB_BRIDGE_API
+FAIL: the consumer-visible declaration must not hard-code dllexport
+FAIL: missing public header documentation phrase: 'C++ header'
+FAIL: missing public header documentation phrase: 'C-linkage symbol'
+FAIL: missing public header documentation phrase: 'not a pure-C header'
+```
+
+### GREEN
+
+After adding `SB_BRIDGE_API`, `SKYRIMBRIDGE_BUILDING_DLL`, and the header
+documentation, the focused validator passed:
+
+```text
+validate_bridge_abi_header: all cases passed
+```
+
+### Review mutation proof
+
+Mutation: changed the consumer macro branch from empty to
+`__declspec(dllimport)`.
+
+Expected validator failure:
+
+```text
+FAIL: SB_BRIDGE_API must dllexport only when SKYRIMBRIDGE_BUILDING_DLL is defined and expand empty for GetProcAddress consumers
+FAIL: consumer inclusion must not force dllimport; consumers use GetProcAddress
+```
+
+Mutation: changed the export declaration back to direct
+`extern "C" __declspec(dllexport)`.
+
+Expected validator failure:
+
+```text
+FAIL: dllexport must appear exactly once, inside the SB_BRIDGE_API producer macro
+FAIL: the exported entry point must use extern C plus SB_BRIDGE_API
+FAIL: the consumer-visible declaration must not hard-code dllexport
+```
+
+Both mutations were reverted before final verification.
+
+### Final review-focused verification
+
+Commands:
+
+```powershell
+python tests/validate_bridge_abi_header.py
+python -c "import pathlib; compile(pathlib.Path('tests/validate_bridge_abi_header.py').read_text(encoding='utf-8'), 'tests/validate_bridge_abi_header.py', 'exec')"
+git diff --check
+```
+
+Observed:
+
+```text
+validate_bridge_abi_header: all cases passed
+```
+
+All three commands exited 0. `git diff --check` produced no whitespace or patch
+hygiene findings.
 
 ## Compile-check note
 

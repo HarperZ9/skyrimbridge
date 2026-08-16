@@ -186,6 +186,7 @@ git commit -m "feat: define the public SkyrimBridge state ABI"
 
 **Files:**
 - Create: `src/core/BridgeApi.cpp`
+- Create: `tests/validate_bridge_abi_implementation.py`
 - Modify: `CMakeLists.txt`
 - Modify: `src/core/main.cpp:326` and the shutdown path
 
@@ -276,15 +277,36 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
+Also create `tests/validate_bridge_abi_implementation.py` as a source-level
+contract check for `src/core/BridgeApi.cpp` while the DLL is still awkward to
+load outside the SKSE runtime. It must fail unless:
+
+- `BridgeInterface g_interface` initializes all six v1 fields, including a
+  non-null `&CopyFrameDataImpl` callback appended after `&IsFrameValidImpl`.
+- `GetFrameDataImpl` returns a published snapshot buffer, never the mutating
+  live `SB::GetMutableData()` block.
+- `CopyFrameDataImpl` rejects null destinations and undersized buffers, copies
+  exactly `sizeof(SB::AllData)`, and writes a frame index coherent with the
+  copied snapshot when `frameIndex` is non-null.
+- `MarkFramePublished(const SB::AllData& publishedData)` copies the sanitized
+  frame into a synchronized published snapshot/double-buffer before advancing
+  the public frame counter.
+- `CMakeLists.txt` adds repository `include/` to the plugin target include
+  paths and defines `SKYRIMBRIDGE_BUILDING_DLL` for the producer target.
+
 - [ ] **Step 2: Run the test to verify it fails**
 
 Build first, then run against the built DLL:
 
 ```bash
 python tests/validate_bridge_abi_export.py build/Release/SkyrimBridge.dll
+python tests/validate_bridge_abi_implementation.py
 ```
 
-Expected: FAIL with "SB_GetBridgeInterface is not exported". `SB_GetProxyInterface` passes, which confirms the parser works rather than reporting a false negative on both.
+Expected: export validator fails with "SB_GetBridgeInterface is not exported".
+`SB_GetProxyInterface` passes, which confirms the parser works rather than
+reporting a false negative on both. The implementation validator fails because
+`src/core/BridgeApi.cpp` is absent.
 
 - [ ] **Step 3: Implement the entry point**
 
@@ -294,6 +316,8 @@ Create `src/core/BridgeApi.cpp`:
 #include "SkyrimBridgeAPI.h"
 
 #include <atomic>
+#include <cstring>
+#include <mutex>
 
 #include "core/BridgeData.h"
 
@@ -301,20 +325,26 @@ namespace SB::Api
 {
     namespace
     {
-        std::atomic<std::uint64_t> g_frameIndex{0};
-        std::atomic<bool>          g_frameValid{false};
+        std::atomic<uint64_t> g_frameIndex{0};
+        std::atomic<bool>     g_frameValid{false};
 
-        std::uint64_t GetFrameIndexImpl()
+        std::mutex           g_snapshotMutex;
+        SB::AllData          g_snapshots[2]{};
+        std::atomic<uint32_t> g_publishedSlot{0};
+        uint64_t             g_publishedFrameIndex = 0;
+
+        uint64_t GetFrameIndexImpl()
         {
             return g_frameIndex.load(std::memory_order_acquire);
         }
 
         const SB::AllData* GetFrameDataImpl()
         {
-            // GetMutableData is the existing accessor, used by the frame loop at
-            // src/core/main.cpp:255. This hands out a const view of that same
-            // block; it does not copy and does not own.
-            return &SB::GetMutableData();
+            if (!g_frameValid.load(std::memory_order_acquire)) {
+                return nullptr;
+            }
+            const uint32_t slot = g_publishedSlot.load(std::memory_order_acquire);
+            return &g_snapshots[slot];
         }
 
         bool IsFrameValidImpl()
@@ -322,18 +352,46 @@ namespace SB::Api
             return g_frameValid.load(std::memory_order_acquire);
         }
 
+        bool CopyFrameDataImpl(void* destination, uint32_t destinationSize, uint64_t* frameIndex)
+        {
+            if (!destination || destinationSize < sizeof(SB::AllData)) {
+                return false;
+            }
+
+            std::lock_guard lock(g_snapshotMutex);
+            if (!g_frameValid.load(std::memory_order_acquire)) {
+                return false;
+            }
+
+            const uint32_t slot = g_publishedSlot.load(std::memory_order_acquire);
+            std::memcpy(destination, &g_snapshots[slot], sizeof(SB::AllData));
+            if (frameIndex) {
+                *frameIndex = g_publishedFrameIndex;
+            }
+            return true;
+        }
+
         BridgeInterface g_interface{
             kBridgeInterfaceVersion,
-            static_cast<std::uint32_t>(sizeof(SB::AllData)),
+            static_cast<uint32_t>(sizeof(SB::AllData)),
             &GetFrameIndexImpl,
             &GetFrameDataImpl,
             &IsFrameValidImpl,
+            &CopyFrameDataImpl,
         };
     }
 
-    void MarkFramePublished()
+    void MarkFramePublished(const SB::AllData& publishedData)
     {
-        g_frameIndex.fetch_add(1, std::memory_order_release);
+        std::lock_guard lock(g_snapshotMutex);
+
+        const uint32_t currentSlot = g_publishedSlot.load(std::memory_order_relaxed);
+        const uint32_t nextSlot = 1U - currentSlot;
+        g_snapshots[nextSlot] = publishedData;
+        g_publishedSlot.store(nextSlot, std::memory_order_release);
+
+        ++g_publishedFrameIndex;
+        g_frameIndex.store(g_publishedFrameIndex, std::memory_order_release);
         g_frameValid.store(true, std::memory_order_release);
     }
 
@@ -343,11 +401,18 @@ namespace SB::Api
     }
 }
 
-extern "C" __declspec(dllexport) SB::Api::BridgeInterface* SB_GetBridgeInterface()
+extern "C" SB_BRIDGE_API SB::Api::BridgeInterface* SB_GetBridgeInterface()
 {
     return &SB::Api::g_interface;
 }
 ```
+
+This implementation must publish only the copied `publishedData` snapshot.
+`GetFrameDataImpl` may expose the current snapshot pointer for short-lived
+compatibility, but it must never return `&SB::GetMutableData()` or any other
+mutating live producer block. `CopyFrameDataImpl` is the coherent consumer path:
+it takes the same lock used by publication, copies one complete `SB::AllData`
+snapshot, and returns the matching `g_publishedFrameIndex`.
 
 Declare the two lifecycle helpers at the end of the `SB::Api` namespace in `include/SkyrimBridgeAPI.h`, inside a block marked internal so consumers do not call them:
 
@@ -355,12 +420,16 @@ Declare the two lifecycle helpers at the end of the `SB::Api` namespace in `incl
 namespace SB::Api
 {
     // Internal. Called by the publish path, not by consumers.
-    void MarkFramePublished();
+    void MarkFramePublished(const SB::AllData& publishedData);
     void MarkTeardown();
 }
 ```
 
-Add `src/core/BridgeApi.cpp` to the plugin target's source list in `CMakeLists.txt`.
+Add `src/core/BridgeApi.cpp` to the plugin target's source list in
+`CMakeLists.txt`. Also add repository `include/` to that target's include
+directories so `#include "SkyrimBridgeAPI.h"` resolves, and define
+`SKYRIMBRIDGE_BUILDING_DLL=1` for the producer target so `SB_BRIDGE_API`
+expands to `__declspec(dllexport)` only while building SkyrimBridge.
 
 - [ ] **Step 4: Call the lifecycle hooks from the existing publish path**
 
@@ -370,7 +439,7 @@ Add the publish mark immediately after line 326, so the counter only advances on
 
 ```cpp
     ENBInterface::PushAllData(data);
-    SB::Api::MarkFramePublished();
+    SB::Api::MarkFramePublished(data);
 ```
 
 Add the teardown mark in the plugin's shutdown path, before any state the block points at is released:
@@ -381,16 +450,23 @@ Add the teardown mark in the plugin's shutdown path, before any state the block 
 
 Include `SkyrimBridgeAPI.h` in `src/core/main.cpp`.
 
-This is the only change to existing behaviour. It advances a counter after the ENB push has already happened; it does not alter any value the ENB path reads, and it cannot reorder or delay that push.
+This is the only change to existing behaviour. It copies the sanitized frame
+into the synchronized published snapshot after the ENB push has already
+happened; it does not alter any value the ENB path reads, and it cannot reorder
+or delay that push.
 
-- [ ] **Step 5: Run both tests to verify they pass**
+- [ ] **Step 5: Run the focused tests to verify they pass**
 
 ```bash
 python tests/validate_bridge_abi_header.py
 python tests/validate_bridge_abi_export.py build/Release/SkyrimBridge.dll
+python tests/validate_bridge_abi_implementation.py
 ```
 
-Expected: both report all cases passed.
+Expected: all three report all cases passed. The implementation validator must
+prove the v1 `CopyFrameData` callback is non-null in the initializer and that
+published copies come from the synchronized snapshot path rather than
+`SB::GetMutableData()`.
 
 - [ ] **Step 6: Verify the ENB path is unchanged**
 
@@ -405,7 +481,7 @@ Expected: unchanged from its pre-task result. If this regresses, the lifecycle h
 - [ ] **Step 7: Commit**
 
 ```bash
-git add include/SkyrimBridgeAPI.h src/core/BridgeApi.cpp src/core/main.cpp CMakeLists.txt tests/validate_bridge_abi_export.py
+git add include/SkyrimBridgeAPI.h src/core/BridgeApi.cpp src/core/main.cpp CMakeLists.txt tests/validate_bridge_abi_export.py tests/validate_bridge_abi_implementation.py
 git commit -m "feat: export the versioned bridge state interface"
 ```
 
