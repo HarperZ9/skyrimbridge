@@ -12,6 +12,19 @@ BBCode, ready to paste into the mod page description field.
 - **Category**: Modders Resources and Tutorials (or Utilities / Patches)
 - **Version**: 3.0.0
 
+## Media uploads (required)
+
+- Use this exact caption on every generated promotional image:
+  `Generated promotional brand art — not an in-game screenshot.`
+- Apply the Nexus Mods **AI Media** tag whenever generated promotional art is
+  used on the page.
+- Do not opt this mod or its generated media into the current **25th
+  Anniversary Mod Drive**. That event prohibits generative-AI assets.
+- Generated promotional art is branding, not real runtime evidence. Support
+  runtime visual, feature, and interoperability claims only with clearly
+  labeled, genuine in-game or SkyrimBridge UI captures from the released
+  build, and keep those captures separate from generated artwork.
+
 ## Requirements (add these on the mod page)
 
 - SKSE64 (or SKSEVR)
@@ -139,6 +152,10 @@ Special Edition/SKSE/ to confirm it loaded.
 Everything that writes to the running engine ships disabled. You turn on each
 feature in its config file, under Data/SKSE/Plugins/SkyrimBridge/.
 
+The public archive specifically ships with
+[font=Courier New]EngineFixes=false[/font]. Enable that engine-writing patch
+only after validating it with your installed game version and load order.
+
 [size=4]Documentation[/size]
 
 The full feature reference, with every console command, config key, and
@@ -147,10 +164,12 @@ source, build instructions, and the offline test harnesses are on GitHub.
 
 [size=4]Scope, stated plainly[/size]
 
-The offline gates are thorough: 18 validation harnesses cover the texture and
-model codecs, collision generation and material mapping, compressed mesh, tree
-wind, and deterministic packaging. The release archive is byte-reproducible and
-ships a content-hash manifest with a SHA-256 sidecar.
+The offline release suite exercises the texture and model codecs, collision
+generation and material mapping, compressed mesh, tree wind, the public-build
+boundary, packaged runtime defaults, manifest integrity, packaged Markdown-link
+integrity, and deterministic archive production. With identical inputs, the
+release archive is byte-reproducible and ships a content-hash manifest with a
+SHA-256 sidecar.
 
 What those gates do not cover is your load order. Broad in-game validation
 across SE, AE, and ENB 0.504 is ahead of this release, not behind it. The
