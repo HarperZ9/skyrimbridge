@@ -71,6 +71,10 @@ namespace SB::Api
         "BridgeInterface must stay standard-layout for the public ABI");
     static_assert(__is_trivially_copyable(BridgeInterface),
         "BridgeInterface must stay trivially copyable for the public ABI");
+
+    // Internal. Called by the publish path, not by consumers.
+    void MarkFramePublished(const SB::AllData& publishedData);
+    void MarkTeardown();
 }
 
 extern "C" SB_BRIDGE_API SB::Api::BridgeInterface* SB_GetBridgeInterface();

@@ -54,6 +54,7 @@ add_commonlibsse_plugin(
     AUTHOR "Zain Dana Harper"
     SOURCES
         src/core/main.cpp
+        src/core/BridgeApi.cpp
         src/core/BridgeData.cpp
         src/core/ENBInterface.cpp
         src/core/CompatDetect.cpp
@@ -139,6 +140,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core
 )
@@ -147,6 +149,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
     ENABLE_SKYRIM_SE=1
     ENABLE_SKYRIM_AE=1
     SKYRIMBRIDGE_V3=1
+    SKYRIMBRIDGE_BUILDING_DLL=1
     HAS_SKSE=1
     SKYRIMBRIDGE_NATIVE_REPLACEMENTS=$<BOOL:${SKYRIMBRIDGE_NATIVE_REPLACEMENTS}>
 )

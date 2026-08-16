@@ -61,6 +61,8 @@
 #include <thread>
 #include <fstream>
 
+#include "SkyrimBridgeAPI.h"
+
 // Individual tracker headers (Update() declarations)
 #include "../Trackers.h"
 
@@ -324,6 +326,7 @@ static void DoFrameUpdate()
 
     // 1. ENB shader parameters (dirty-tracked push of the whole table)
     ENBInterface::PushAllData(data);
+    SB::Api::MarkFramePublished(data);
 
     // 2. Phase 2: weather parameter computation and push
     try {
@@ -439,6 +442,7 @@ static void __stdcall OnENBCallback(int a_callbackType)
         break;
 
     case ENBInterface::CallbackType::OnExit:
+        SB::Api::MarkTeardown();
         SB::ParmLinkCompat::Get().Shutdown();
         SB::SharedMemoryBridge::Get().Shutdown();
         SB::BridgeCommand::Get().Shutdown();
