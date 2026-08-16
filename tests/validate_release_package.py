@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import argparse
+import configparser
 from pathlib import Path
 import subprocess
 import struct
@@ -219,6 +220,7 @@ def main() -> int:
 
             check_no_native_replacements(release_zip)
             check_no_private_markers_outside_provenance(release_zip)
+            check_public_runtime_defaults(release_zip)
 
     print(
         "PASS: deterministic public release package "
@@ -286,6 +288,23 @@ def check_no_private_markers_outside_provenance(
     assert not failures, (
         "private native-suite markers outside provenance docs:\n"
         + "\n".join(failures)
+    )
+
+
+def check_public_runtime_defaults(release_zip: zipfile.ZipFile) -> None:
+    """Engine-writing public defaults must stay disabled in the package."""
+    text = release_zip.read("SKSE/Plugins/SkyrimBridge/SkyrimBridge.ini").decode(
+        "ascii"
+    )
+    parser = configparser.ConfigParser(inline_comment_prefixes=(";",))
+    parser.optionxform = str
+    parser.read_string(text)
+
+    assert parser.has_section("Native"), "public SkyrimBridge.ini lacks [Native]"
+    value = parser.get("Native", "EngineFixes", fallback=None)
+    assert value == "false", (
+        "public SkyrimBridge.ini must ship engine-writing EngineFixes disabled; "
+        f"got {value!r}"
     )
 
 

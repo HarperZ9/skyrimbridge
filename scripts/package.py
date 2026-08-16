@@ -95,7 +95,7 @@ PUBLIC_SKYRIMBRIDGE_INI = (
     "; =============================================================================\r\n"
     "\r\n"
     "[Native]\r\n"
-    "EngineFixes          = true    ; recovered AE spin-lock patch (REL::ID 68233), validated before write\r\n"
+    "EngineFixes          = false   ; recovered AE spin-lock patch (REL::ID 68233), validated before write\r\n"
     "\r\n"
     "; Foreign-texture integration (both ship OFF: enable, validate in-game).\r\n"
     ";   TextureAutoConvert  background scan at data-load: every textures\\*.png/.tga/.bmp\r\n"
