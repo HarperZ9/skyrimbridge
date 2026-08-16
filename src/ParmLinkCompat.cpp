@@ -12,6 +12,8 @@
 
 #include <RE/Skyrim.h>
 #include <SKSE/SKSE.h>
+#include <bit>
+#include <cstdint>
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -19,6 +21,17 @@
 
 namespace SB
 {
+
+namespace
+{
+    constexpr uint32_t kPlayerCombatInCombat = 1u << 0;
+
+    float PlayerCombatFlag(uint32_t bit)
+    {
+        const auto combatBits = std::bit_cast<uint32_t>(GetData().player.Combat.x);
+        return (combatBits & bit) != 0 ? 1.0f : 0.0f;
+    }
+}
 
 //=============================================================================
 //  ParmLinkCompat — Initialization
@@ -125,7 +138,7 @@ void ParmLinkCompat::RegisterENBVariables()
     }, "Player health percentage [0,1]");
 
     RegisterVariable("sb.inCombat", []() -> float {
-        return GetData().player.Combat.x;
+        return PlayerCombatFlag(kPlayerCombatInCombat);
     }, "Player in combat flag");
 
     RegisterVariable("sb.isUnderwater", []() -> float {

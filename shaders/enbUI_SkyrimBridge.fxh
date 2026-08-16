@@ -297,7 +297,7 @@ void SB_UpdateMonitor()
     _SBMon_Stamina      = SB_Player_Vitals.y;
     _SBMon_Magicka      = SB_Player_Vitals.z;
     _SBMon_Speed        = SB_Player_Movement.x;
-    _SBMon_InCombat     = SB_Player_Combat.x > 0.5;
+    _SBMon_InCombat     = (asuint(SB_Player_Combat.x) & SB_PCOMBAT_IN_COMBAT) != 0;
     _SBMon_Underwater   = SB_Player_Water.x > 0.5;
     _SBMon_Submersion   = SB_Player_Water.z;
 

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Focused regression checks for public scalar flag fields.
+"""Focused regression checks for public flag-field contracts.
 
 BridgeData.h documents these public flag groups as ordinary 0.0/1.0 float4
 components. This test guards against silently reintroducing bit-packed .x
-publishers or shader helpers for those fields.
+publishers or shader helpers for those fields. Player combat is the explicit
+exception: Combat.x is documented as a packed bitfield, so public consumers
+must decode it before exposing individual combat flags.
 """
 
 from __future__ import annotations
@@ -103,6 +105,50 @@ CB_HELPERS = [
     r"bool\s+SB_IsInterior\(\)\s*\{\s*return\s+SB_Interior_Flags\.x\s*>\s*0\.5\s*;\s*\}",
 ]
 
+PLAYER_COMBAT_CONTRACT = {
+    "src/core/BridgeData.h": [
+        r"Float4\s+Combat;\s*//\s*\.x\s*=\s*packed bitfield \(b0=combat,b1=bleedout,b2=killcam,b3=weaponDrawn\),\s*\.y\s*=\s*beastForm\(0/1/2\),\s*\.z\s*=\s*timeScale,\s*\.w\s*=\s*combatTargetCount",
+    ],
+    "shaders/SkyrimBridge.fxh": [
+        r"float4\s+SB_Player_Combat;\s*//\s*\.x\s*=\s*packed bitfield \(b0=combat,\s*b1=bleedout,\s*b2=killcam,\s*b3=weaponDrawn\)\s*//\s*\.y\s*=\s*beastForm\(0/1/2\),\s*\.z\s*=\s*timeScale,\s*\.w\s*=\s*combatTargetCount",
+        r"#define\s+SB_PCOMBAT_IN_COMBAT\s+\(1u\s*<<\s*0\)",
+        r"#define\s+SB_PCOMBAT_BLEEDOUT\s+\(1u\s*<<\s*1\)",
+        r"#define\s+SB_PCOMBAT_KILLCAM\s+\(1u\s*<<\s*2\)",
+        r"#define\s+SB_PCOMBAT_WEAPON_DRAWN\s+\(1u\s*<<\s*3\)",
+        r"uint\s+SB_PlayerCombatBits\(\)\s*\{\s*return\s+asuint\(SB_Player_Combat\.x\)\s*;\s*\}",
+        r"bool\s+SB_PlayerCombatHas\(uint\s+bit\)\s*\{\s*return\s+\(SB_PlayerCombatBits\(\)\s*&\s*bit\)\s*!=\s*0\s*;\s*\}",
+        r"float\s+SB_PlayerCombatFlag\(uint\s+bit\)\s*\{\s*return\s+SB_PlayerCombatHas\(bit\)\s*\?\s*1\.0\s*:\s*0\.0\s*;\s*\}",
+        r"bool\s+SB_IsInCombat\(\)\s*\{\s*return\s+SB_PlayerCombatHas\(SB_PCOMBAT_IN_COMBAT\)\s*;\s*\}",
+        r"bool\s+SB_IsInBleedout\(\)\s*\{\s*return\s+SB_PlayerCombatHas\(SB_PCOMBAT_BLEEDOUT\)\s*;\s*\}",
+        r"bool\s+SB_IsInKillcam\(\)\s*\{\s*return\s+SB_PlayerCombatHas\(SB_PCOMBAT_KILLCAM\)\s*;\s*\}",
+        r"float\s+SB_CombatIntensity\(\)\s*\{\s*return\s+SB_PlayerCombatFlag\(SB_PCOMBAT_IN_COMBAT\)\s*;\s*\}",
+    ],
+    "shaders/enbUI_SkyrimBridge.fxh": [
+        r"_SBMon_InCombat\s*=\s*\(asuint\(SB_Player_Combat\.x\)\s*&\s*SB_PCOMBAT_IN_COMBAT\)\s*!=\s*0\s*;",
+    ],
+    "src/ParmLinkCompat.cpp": [
+        r"#include\s+<bit>",
+        r"constexpr\s+uint32_t\s+kPlayerCombatInCombat\s*=\s*1u\s*<<\s*0\s*;",
+        r"float\s+PlayerCombatFlag\(uint32_t\s+bit\)\s*\{\s*const\s+auto\s+combatBits\s*=\s*std::bit_cast<uint32_t>\(GetData\(\)\.player\.Combat\.x\);\s*return\s+\(combatBits\s*&\s*bit\)\s*!=\s*0\s*\?\s*1\.0f\s*:\s*0\.0f;\s*\}",
+        r"RegisterVariable\(\"sb\.inCombat\",\s*\[\]\(\)\s*->\s*float\s*\{\s*return\s+PlayerCombatFlag\(kPlayerCombatInCombat\);\s*\}",
+    ],
+}
+
+FORBIDDEN_PLAYER_COMBAT_CONSUMER_PATTERNS = {
+    "shaders/SkyrimBridge.fxh": [
+        r"SB_Player_Combat\.x\s*>\s*0\.5",
+        r"SB_Player_Combat\.y\s*>\s*0\.5",
+        r"SB_Player_Combat\.z\s*>\s*0\.5",
+        r"return\s+SB_Player_Combat\.x\s*;",
+    ],
+    "shaders/enbUI_SkyrimBridge.fxh": [
+        r"SB_Player_Combat\.x\s*>\s*0\.5",
+    ],
+    "src/ParmLinkCompat.cpp": [
+        r"return\s+GetData\(\)\.player\.Combat\.x\s*;",
+    ],
+}
+
 FORBIDDEN_SCALAR_PACKING_TOKENS = [
     "SB_HAS_FLAG",
     "SB_FLAG_TO_FLOAT",
@@ -161,6 +207,17 @@ def main() -> int:
     for pattern in CB_HELPERS:
         if not re.search(pattern, cb_text):
             failures.append(f"SkyrimBridge_CB.fxh missing scalar helper: {pattern}")
+
+    for relative, patterns in PLAYER_COMBAT_CONTRACT.items():
+        assert_patterns(failures, relative, patterns)
+
+    for relative, patterns in FORBIDDEN_PLAYER_COMBAT_CONSUMER_PATTERNS.items():
+        text = read(relative)
+        for pattern in patterns:
+            if re.search(pattern, text):
+                failures.append(
+                    f"{relative} still treats packed SB_Player_Combat as scalar: {pattern}"
+                )
 
     for line in failures:
         print(f"FAIL: {line}")

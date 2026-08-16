@@ -132,10 +132,15 @@ float4 SB_Player_Position;     // .xyz = world pos, .w = altitude above water
 float4 SB_Player_Vitals;       // .x = health%, .y = stamina%, .z = magicka%, .w = level
 float4 SB_Player_Movement;     // .x = speed (units/s), .y = sprinting,
                                 // .z = swimming, .w = mounted
-float4 SB_Player_Combat;       // .x = inCombat, .y = bleedout,
-                                // .z = killcam, .w = weaponDrawn
+float4 SB_Player_Combat;       // .x = packed bitfield (b0=combat, b1=bleedout, b2=killcam, b3=weaponDrawn)
+                                // .y = beastForm(0/1/2), .z = timeScale, .w = combatTargetCount
 float4 SB_Player_Water;        // .x = underwater, .y = waterSurfaceZ,
                                 // .z = submersionDepth, .w = wading
+
+#define SB_PCOMBAT_IN_COMBAT    (1u << 0)
+#define SB_PCOMBAT_BLEEDOUT     (1u << 1)
+#define SB_PCOMBAT_KILLCAM      (1u << 2)
+#define SB_PCOMBAT_WEAPON_DRAWN (1u << 3)
 
 
 //─────────────────────────────────────────────────────────────────────────────
@@ -697,9 +702,12 @@ float SB_HeightFogDensity(float worldY)
 float SB_GetHealth()         { return SB_Player_Vitals.x; }
 float SB_GetStamina()        { return SB_Player_Vitals.y; }
 float SB_GetMagicka()        { return SB_Player_Vitals.z; }
-bool  SB_IsInCombat()        { return SB_Player_Combat.x > 0.5; }
-bool  SB_IsInBleedout()      { return SB_Player_Combat.y > 0.5; }
-bool  SB_IsInKillcam()       { return SB_Player_Combat.z > 0.5; }
+uint  SB_PlayerCombatBits()  { return asuint(SB_Player_Combat.x); }
+bool  SB_PlayerCombatHas(uint bit) { return (SB_PlayerCombatBits() & bit) != 0; }
+float SB_PlayerCombatFlag(uint bit) { return SB_PlayerCombatHas(bit) ? 1.0 : 0.0; }
+bool  SB_IsInCombat()        { return SB_PlayerCombatHas(SB_PCOMBAT_IN_COMBAT); }
+bool  SB_IsInBleedout()      { return SB_PlayerCombatHas(SB_PCOMBAT_BLEEDOUT); }
+bool  SB_IsInKillcam()       { return SB_PlayerCombatHas(SB_PCOMBAT_KILLCAM); }
 bool  SB_IsUnderwater()      { return SB_Player_Water.x > 0.5; }
 bool  SB_IsSprinting()       { return SB_Player_Movement.y > 0.5; }
 bool  SB_IsSwimming()        { return SB_Player_Movement.z > 0.5; }
@@ -738,7 +746,7 @@ float SB_GetSlowTimeFactor() { return SB_FX_Time.x; }
 float SB_SceneWetness()       { return SB_Precip_Surface.x; }
 
 // Combat intensity — returns 0.0 (peaceful) to 1.0 (full combat)
-float SB_CombatIntensity()    { return SB_Player_Combat.x; }
+float SB_CombatIntensity()    { return SB_PlayerCombatFlag(SB_PCOMBAT_IN_COMBAT); }
 
 // Weather transition progress — 0.0 = fully outgoing, 1.0 = fully incoming
 float SB_SmoothWeatherTransition() { return SB_Weather_Transition.x; }
