@@ -242,6 +242,19 @@ target_compile_definitions(d3d11_proxy PRIVATE
 include(CTest)
 if(BUILD_TESTING)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+    add_executable(SkyrimBridgeConfigTest
+        tests/sbconfig_inline_comment_test.cpp
+    )
+    target_include_directories(SkyrimBridgeConfigTest PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core
+    )
+    target_compile_features(SkyrimBridgeConfigTest PRIVATE cxx_std_23)
+    add_test(
+        NAME SkyrimBridge.ConfigInlineComments
+        COMMAND SkyrimBridgeConfigTest
+    )
+
     add_test(
         NAME SkyrimBridge.PortableValidation
         COMMAND

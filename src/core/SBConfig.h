@@ -188,6 +188,13 @@ namespace SB::Cfg
             if (eq == std::string::npos) continue;
             std::string key = Trim(t.substr(0, eq));
             std::string val = Trim(t.substr(eq + 1));
+            for (std::size_t i = 0; i < val.size(); ++i) {
+                if (val[i] == ';' &&
+                    (i == 0 || val[i - 1] == ' ' || val[i - 1] == '\t')) {
+                    val = Trim(val.substr(0, i));
+                    break;
+                }
+            }
             if (!cur) {  // keys before any header land in an implicit "" section
                 doc.sections.push_back(Section{ "", {} });
                 cur = &doc.sections.back();
