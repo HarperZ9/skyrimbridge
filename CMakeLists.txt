@@ -28,11 +28,11 @@ find_package(CommonLibSSE REQUIRED CONFIG)
 #  the build used to separate it from the rest of the plugin, so every compiled
 #  SkyrimBridge contained it and no release could be cut without it.
 #
-#  ON keeps the full plugin, which is the private default. OFF produces a build
-#  with the suite absent from the binary entirely, not merely disabled at
-#  runtime: an inert copy is still a copy.
+#  OFF is the public/default build and keeps the suite absent from the binary
+#  entirely, not merely disabled at runtime: an inert copy is still a copy.
+#  Private operator builds must opt in explicitly with ON.
 option(SKYRIMBRIDGE_NATIVE_REPLACEMENTS
-       "Build the Kitsuune-derived native ENB plugin replacement suite" ON)
+       "Build the Kitsuune-derived native ENB plugin replacement suite" OFF)
 
 set(SKYRIMBRIDGE_NATIVE_SOURCES "")
 if(SKYRIMBRIDGE_NATIVE_REPLACEMENTS)
@@ -44,9 +44,9 @@ if(SKYRIMBRIDGE_NATIVE_REPLACEMENTS)
         src/core/SkyLighting.cpp
         src/core/EnbLightInventoryFix.cpp
     )
-    message(STATUS "SkyrimBridge: native replacement suite INCLUDED (private build)")
+    message(STATUS "SkyrimBridge: native replacement suite INCLUDED (private explicit opt-in)")
 else()
-    message(STATUS "SkyrimBridge: native replacement suite EXCLUDED (distributable build)")
+    message(STATUS "SkyrimBridge: native replacement suite EXCLUDED (public/default build)")
 endif()
 
 add_commonlibsse_plugin(
@@ -174,14 +174,22 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/config/SkyrimBridge.ini"
         "$<TARGET_FILE_DIR:${PROJECT_NAME}>/config/SkyrimBridge.ini"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/config/Sky.ini"
-        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/config/Sky.ini"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/config/WeatherRouting.example.ini"
-        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/config/WeatherRouting.example.ini"
-    COMMENT "Copying config files to build directory"
+    COMMENT "Copying public config files to build directory"
 )
+
+if(SKYRIMBRIDGE_NATIVE_REPLACEMENTS)
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/config"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/config/Sky.ini"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/config/Sky.ini"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/config/WeatherRouting.example.ini"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/config/WeatherRouting.example.ini"
+        COMMENT "Copying private native-suite config files to build directory"
+    )
+endif()
 
 # ============================================================================
 # d3d11 proxy — full D3D11 API wrap for mid-frame injection

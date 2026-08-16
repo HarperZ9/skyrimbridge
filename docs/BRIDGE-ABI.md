@@ -183,6 +183,7 @@ should continue to use `shaders/SkyrimBridge.fxh`, including the documented
 `SB_Retain` usage in `docs/parameters.md`.
 
 This ABI also does not change the project's credits, provenance, Kitsuune
-interoperability rules, or public-release exclusions. The native replacement
-suite still defers to the original Kitsuune plugins when they are present, and
-the provenance and distribution posture in `CREDITS.md` remains authoritative.
+interoperability rules, or public-release exclusions. The public build does not
+ship the private native replacement-suite implementation. It may still detect
+the original Kitsuune plugins for compatibility/deferral paths, and the
+provenance and distribution posture in `CREDITS.md` remains authoritative.

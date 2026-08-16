@@ -7,9 +7,13 @@ Read it before any public release.
 
 ## Kitsuune (LonelyKitsuune) — original author of the reversed plugins
 
-SkyrimBridge's native ENB-plugin replacement suite reimplements the functionality
-of plugins authored by **Kitsuune (LonelyKitsuune)**. Each unit below exists
-because it reproduces the behavior of one of their plugins:
+SkyrimBridge has a private, explicitly opted-in native ENB-plugin replacement
+suite that reimplements functionality of plugins authored by
+**Kitsuune (LonelyKitsuune)**. Public packages exclude that suite from the
+compiled binary; this section records the provenance of the private
+implementation and the interoperability behavior that remains in the public
+build. Each private unit exists because it reproduces the behavior of one of
+their plugins:
 
 | Kitsuune plugin | where | SkyrimBridge unit |
 | --- | --- | --- |
@@ -23,14 +27,15 @@ because it reproduces the behavior of one of their plugins:
 ## Interoperability: the original always wins
 
 SkyrimBridge does not displace these plugins. `CompatDetect` probes for each at
-`kPostLoad` and again at `kDataLoaded`, and when the original is loaded the
-matching SkyrimBridge unit stands down and logs that it deferred. A user who
-already runs KreatE, ELIF, EVLaS/AELAS, Native EditorID Fix, or ENB Worldspace
-Weatherlists keeps them, and SkyrimBridge fills only what is absent.
+`kPostLoad` and again at `kDataLoaded`. In private opt-in builds, when the
+original is loaded the matching SkyrimBridge unit stands down and logs that it
+deferred. In public builds, the private replacement units are absent, so users
+who want KreatE, ELIF, EVLaS/AELAS, Native EditorID Fix, or ENB Worldspace
+Weatherlists behavior should install the original plugins.
 
-The replacements exist so a load order does not *need* these plugins, not to
-compete with them. That is a design constraint, not a courtesy: do not add a
-code path that overrides a detected original.
+The private replacements exist for operator-only builds and not to compete with
+the originals. That is a design constraint, not a courtesy: do not add a code
+path that overrides a detected original.
 
 Kitsuune is credited separately, as LonelyKitsuune / Skratzer, for legacy "ENB of
 the Elders" preset shader techniques: Dynamic Gaussian Bloom 2.2, ADOF, sunsprite,
@@ -45,9 +50,10 @@ same author reversed and reimplemented, so the strict clean-room definition does
 not apply and must not be claimed anywhere in this repository, its docs, or any
 public surface.
 
-What ships is original SkyrimBridge code reproducing observed behavior. No
-Kitsuune source, binary, decompiled output, or `.kfg`/`.cfg` config is
-redistributed. The RE notes and binaries are held privately outside this
+What exists in the private opt-in suite is original SkyrimBridge code
+reproducing observed behavior. Public packages do not ship those compiled
+objects. No Kitsuune source, binary, decompiled output, or `.kfg`/`.cfg` config
+is redistributed. The RE notes and binaries are held privately outside this
 repository and are excluded from every package.
 
 "Clean-room" is a specific provenance claim. This is not it.
@@ -105,9 +111,11 @@ readable source.
 cmake -S . -B build -DSKYRIMBRIDGE_NATIVE_REPLACEMENTS=OFF
 ```
 
-`ON` is the default and gives the full private plugin. `OFF` omits the six
-units from the target sources entirely, so the suite is absent from the
-binary rather than disabled at runtime: an inert copy is still a copy.
+`OFF` is the default and is the only public-package configuration. It omits the
+six units from the target sources entirely, so the suite is absent from the
+binary rather than disabled at runtime: an inert copy is still a copy. Private
+operator builds must opt in explicitly with
+`-DSKYRIMBRIDGE_NATIVE_REPLACEMENTS=ON`.
 
 The distributable build still detects Kitsuune's plugins and defers to them,
 because that detection lives in `CompatDetect` and is not part of the suite.
@@ -116,11 +124,10 @@ they are absent. The weather workshop keeps working; without the native
 EditorID cache it takes names from whichever provider the user already has, and
 falls back to naming weathers by FormID.
 
-`tests/validate_release_package.py` enforces this against the shipped bytes
-rather than the build configuration. Run it with `--release`, or set
-`SKYRIMBRIDGE_RELEASE=1`, on any release path: it then fails if the archive
-contains the suite. Without that flag it only warns, since the default build is
-the full one and is meant to contain it.
+`tests/validate_release_package.py` and `scripts/package.py` enforce this
+against the shipped bytes rather than the build configuration. A marker for the
+private suite is always a hard failure on the public package path; there is no
+warning-only or private-success archive mode.
 
 SkyrimBridge's other
 capabilities ship without it: live parameters, the texture / model / collision

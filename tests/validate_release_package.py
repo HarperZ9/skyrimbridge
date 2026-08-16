@@ -11,9 +11,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
+import argparse
 from pathlib import Path
 import subprocess
+import struct
 import sys
 import tempfile
 import zipfile
@@ -24,6 +25,7 @@ VERSION = "3.0.0"
 ARCHIVE_NAME = f"SkyrimBridge-{VERSION}.zip"
 
 EXPECTED_DOCS = {
+    "BRIDGE-ABI.md",
     "CHANGELOG.md",
     "CREDITS.md",
     "GPU.md",
@@ -36,16 +38,11 @@ EXPECTED_DOCS = {
     "parameters.md",
 }
 
-# Configs owned by the native replacement suite. Present only in a build that
-# has the suite; a distributable build ships no code that reads them.
-NATIVE_SUITE_PAYLOAD = {
-    "SKSE/Plugins/SkyrimBridge/Sky.ini",
-    "SKSE/Plugins/SkyrimBridge/WeatherRouting.example.ini",
-}
-
 BASE_PAYLOAD = {f"Docs/{name}" for name in EXPECTED_DOCS} | {
     "Optional-GPU-Proxy/READ-ME.txt",
     "Optional-GPU-Proxy/d3d11.dll",
+    "SDK/SkyrimBridgeAPI.h",
+    "SDK/core/BridgeData.h",
     "SKSE/Plugins/SkyrimBridge.dll",
     "SKSE/Plugins/SkyrimBridge/GPU.ini",
     "SKSE/Plugins/SkyrimBridge/SkyrimBridge.ini",
@@ -60,22 +57,40 @@ BASE_PAYLOAD = {f"Docs/{name}" for name in EXPECTED_DOCS} | {
     "Tools/sb_smoke_tour.py",
 }
 
-
-def expected_payload(has_native_suite: bool) -> set[str]:
-    """The archive contents depend on which build is being packaged."""
-    return BASE_PAYLOAD | (NATIVE_SUITE_PAYLOAD if has_native_suite else set())
-
+PROVENANCE_MARKER_DOCS = {
+    "Docs/BRIDGE-ABI.md",
+    "Docs/CREDITS.md",
+    "Docs/README.md",
+    "Docs/THIRD_PARTY_NOTICES.md",
+    "Docs/USER-GUIDE.md",
+    "Docs/VALIDATION-PROTOCOL.md",
+}
 
 
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def run_packager(output_dir: Path) -> Path:
+def make_minimal_x64_pe(*markers: bytes) -> bytes:
+    """Return enough of a PE image for the public packager's x64 gate."""
+    data = bytearray(512)
+    data[0:2] = b"MZ"
+    pe_offset = 0x80
+    struct.pack_into("<I", data, 0x3C, pe_offset)
+    data[pe_offset : pe_offset + 4] = b"PE\0\0"
+    struct.pack_into("<H", data, pe_offset + 4, 0x8664)
+    for marker in markers:
+        data.extend(marker)
+    return bytes(data)
+
+
+def run_packager(output_dir: Path, build_dir: Path) -> Path:
     result = subprocess.run(
         [
             sys.executable,
             str(ROOT / "scripts" / "package.py"),
+            "--build-dir",
+            str(build_dir),
             "--dist-dir",
             str(output_dir),
             "--quiet",
@@ -95,18 +110,74 @@ def run_packager(output_dir: Path) -> Path:
     return archive
 
 
+def check_native_suite_build_is_rejected() -> None:
+    """A public package must fail hard on a permission-gated native marker."""
+    with tempfile.TemporaryDirectory(prefix="skyrimbridge-native-marker-test-") as temp:
+        temp_root = Path(temp)
+        build_dir = temp_root / "build"
+        release_dir = build_dir / "Release"
+        dist_dir = temp_root / "dist"
+        release_dir.mkdir(parents=True)
+        (release_dir / "SkyrimBridge.dll").write_bytes(
+            make_minimal_x64_pe(NATIVE_SUITE_MARKERS[0])
+        )
+        (release_dir / "d3d11.dll").write_bytes(make_minimal_x64_pe())
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts" / "package.py"),
+                "--build-dir",
+                str(build_dir),
+                "--dist-dir",
+                str(dist_dir),
+                "--quiet",
+            ],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+        )
+        output = result.stdout + result.stderr
+        assert result.returncode != 0, (
+            "packager accepted a binary carrying a native-suite marker:\n"
+            f"{output}"
+        )
+        assert "Kitsuune" in output or "native replacement" in output, output
+        assert not (dist_dir / ARCHIVE_NAME).exists(), (
+            "packager created a public archive after detecting native-suite content"
+        )
+        assert not (dist_dir / f"{ARCHIVE_NAME}.sha256").exists(), (
+            "packager created a checksum for a rejected native-suite archive"
+        )
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--build-dir",
+        type=Path,
+        default=ROOT / "build",
+        help="CMake build directory to package and validate (default: %(default)s)",
+    )
+    return parser.parse_args()
+
+
 def main() -> int:
+    args = parse_args()
+    build_dir = args.build_dir.resolve()
+    check_native_suite_build_is_rejected()
+
     required_binaries = (
-        ROOT / "build" / "Release" / "SkyrimBridge.dll",
-        ROOT / "build" / "Release" / "d3d11.dll",
+        build_dir / "Release" / "SkyrimBridge.dll",
+        build_dir / "Release" / "d3d11.dll",
     )
     missing = [str(path) for path in required_binaries if not path.is_file()]
     assert not missing, "build Release targets first; missing: " + ", ".join(missing)
 
     with tempfile.TemporaryDirectory(prefix="skyrimbridge-package-test-") as temp:
         temp_root = Path(temp)
-        archive_a = run_packager(temp_root / "a")
-        archive_b = run_packager(temp_root / "b")
+        archive_a = run_packager(temp_root / "a", build_dir)
+        archive_b = run_packager(temp_root / "b", build_dir)
         bytes_a = archive_a.read_bytes()
         bytes_b = archive_b.read_bytes()
 
@@ -119,9 +190,7 @@ def main() -> int:
             assert sidecar.read_text(encoding="ascii") == expected_sidecar
 
         with zipfile.ZipFile(archive_a) as release_zip:
-            plugin_bytes = release_zip.read("SKSE/Plugins/SkyrimBridge.dll")
-            has_native_suite = NATIVE_SUITE_MARKERS[0] in plugin_bytes
-            expected_files = expected_payload(has_native_suite)
+            expected_files = BASE_PAYLOAD
 
             names = release_zip.namelist()
             assert names == sorted(expected_files | {"MANIFEST.json"}), (
@@ -149,11 +218,11 @@ def main() -> int:
                 assert info.date_time == (2000, 1, 1, 0, 0, 0), info.filename
 
             check_no_native_replacements(release_zip)
+            check_no_private_markers_outside_provenance(release_zip)
 
-    kind = "private" if has_native_suite else "distributable"
     print(
         "PASS: deterministic public release package "
-        f"({len(expected_files)} payload files + manifest, {kind} build)"
+        f"({len(expected_files)} payload files + manifest, distributable build)"
     )
     return 0
 
@@ -173,26 +242,19 @@ NATIVE_SUITE_MARKERS = (
     b"KreateRecords",
     b"EditorIDCache",
     b"LoadKreateProfile",
+    b"Sky.ini",
     b"WeatherRouting.ini",
 )
 
 
 def check_no_native_replacements(release_zip: zipfile.ZipFile) -> None:
-    """Report whether the packaged binary carries the permission-gated suite.
+    """Fail if a packaged binary carries the permission-gated suite.
 
     Distributing it needs Kitsuune's permission, which has not been granted;
     see CREDITS.md. A runtime toggle is not sufficient, because an inert copy
     in the binary is still a copy, so this inspects the shipped bytes rather
     than trusting the build configuration.
-
-    The default build is the full private one, and it is meant to contain the
-    suite, so finding it here is only a defect when an actual release is being
-    cut. Pass --release, or set SKYRIMBRIDGE_RELEASE=1, to make it fatal. The
-    release path must set one of those; without it this only warns, and a
-    warning nobody reads is how the suite would end up shipped.
     """
-    strict = "--release" in sys.argv or os.environ.get("SKYRIMBRIDGE_RELEASE") == "1"
-
     for info in release_zip.infolist():
         if not info.filename.lower().endswith((".dll", ".exe")):
             continue
@@ -206,9 +268,25 @@ def check_no_native_replacements(release_zip: zipfile.ZipFile) -> None:
             "-DSKYRIMBRIDGE_NATIVE_REPLACEMENTS=OFF for a distributable build. "
             "See CREDITS.md."
         )
-        if strict:
-            raise AssertionError(message)
-        print(f"NOTE: private build, not distributable. {message}")
+        raise AssertionError(message)
+
+
+def check_no_private_markers_outside_provenance(
+    release_zip: zipfile.ZipFile,
+) -> None:
+    """Runtime payloads and non-provenance docs must not carry suite markers."""
+    failures = []
+    for info in release_zip.infolist():
+        if info.filename == "MANIFEST.json" or info.filename in PROVENANCE_MARKER_DOCS:
+            continue
+        blob = release_zip.read(info.filename)
+        found = [m.decode("ascii") for m in NATIVE_SUITE_MARKERS if m in blob]
+        if found:
+            failures.append(f"{info.filename}: {', '.join(found)}")
+    assert not failures, (
+        "private native-suite markers outside provenance docs:\n"
+        + "\n".join(failures)
+    )
 
 
 if __name__ == "__main__":

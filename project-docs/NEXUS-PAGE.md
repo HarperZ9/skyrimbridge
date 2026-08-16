@@ -72,13 +72,14 @@ ENB Worldspace Weatherlists at startup. When one is loaded, SkyrimBridge stands
 down from that feature and logs that it deferred, so nothing here competes with
 them and you are never asked to choose.
 
-Those plugins are by [b]Kitsuune (LonelyKitsuune)[/b]. SkyrimBridge does contain
-its own implementations of that functionality, developed by reverse-engineering
-their compiled binaries, and those are [b]not included in this download[/b].
-Redistributing them needs Kitsuune's permission, which has not been granted, so
-the released build is compiled with that suite absent from the binary rather
-than merely switched off. The full attribution and provenance record ships in
-the archive as [font=Courier New]Docs/CREDITS.md[/font].
+Those plugins are by [b]Kitsuune (LonelyKitsuune)[/b]. SkyrimBridge has a
+private opt-in implementation of related behavior, developed by
+reverse-engineering their compiled binaries, and that implementation is
+[b]not included in this download[/b]. Redistributing it needs Kitsuune's
+permission, which has not been granted, so the released build is compiled with
+that suite absent from the binary rather than merely switched off. The full
+attribution and provenance record ships in the archive as
+[font=Courier New]Docs/CREDITS.md[/font].
 
 What that means in practice: install Kitsuune's plugins for those features. They
 are the originals, they are maintained, and SkyrimBridge is built to sit beside

@@ -14,7 +14,7 @@ feature deliberately, in its config file or with a console command.
 2. [Live ENB parameters](#live-enb-parameters)
 3. [The weather workshop](#the-weather-workshop)
 4. [Runtime write-back](#runtime-write-back)
-5. [Native ENB-plugin replacements](#native-enb-plugin-replacements)
+5. [Kitsuune plugin interoperability](#kitsuune-plugin-interoperability)
 6. [Editing engine records](#editing-engine-records)
 7. [The texture pipeline](#the-texture-pipeline)
 8. [The model and collision pipeline](#the-model-and-collision-pipeline)
@@ -92,23 +92,22 @@ color, actor values, timescale, and game hour. Every target is typed engine
 access, never a raw address. Every rule ships disabled; you enable the ones
 you want in the config file.
 
-## Native ENB-plugin replacements
+## Kitsuune plugin interoperability
 
-These reimplement the third-party ENB plugins that presets used to depend on,
-using the plugin's own flat INI files. Toggle them in the `[Native]` section
-of `SkyrimBridge.ini`. All the ones that change the look ship off.
+The public SkyrimBridge archive does not include the private native
+replacement-suite implementation for KreatE, EVLaS/AELAS, ELIF, Native EditorID
+Fix, or ENB Worldspace Weatherlists behavior. It also does not ship `Sky.ini` or
+`WeatherRouting.example.ini`.
 
-- **WeatherRouting**: per-worldspace ENB weather-list switching. Reads
-  `WeatherRouting.ini` (an example is shipped).
-- **Sky**: a celestial lighting model with an orbital sun and moon and dynamic
-  ambient. The model loads from `Sky.ini`. The live ambient write is gated by
-  `[Sky] Enable`, and the orbital sun by `[Orbit] MoveSun`, both off by
-  default.
-- **EnbLightInventoryFix**: stops ENB particle lights on inventory 3D item
-  previews from leaking into the world. AE only. Ships off.
-- **EngineFixes**: a recovered engine patch, validated before it writes.
+If your preset or load order needs those features, install the original plugins
+by Kitsuune (LonelyKitsuune). SkyrimBridge detects the originals for
+compatibility and deferral paths, and public documentation keeps the provenance
+record in `CREDITS.md` so the boundary stays visible.
 
-The editor-ID cache that names forms for the weather workshop is always on.
+Public SkyrimBridge features continue here: live ENB state publishing, the
+weather workshop, runtime write-back, record editing, texture/model/collision
+pipelines, diagnostics, the command channel, the bridge state ABI, and the
+optional GPU proxy.
 
 ## Editing engine records
 

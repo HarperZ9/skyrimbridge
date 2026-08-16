@@ -6,11 +6,11 @@ contains tables derived from Microsoft DirectXTex. These components are not
 separate SkyrimBridge products.
 
 This file covers vendored dependencies only. It is **not** the full attribution
-surface. SkyrimBridge's native ENB-plugin replacement suite reimplements the
-functionality of plugins authored by Kitsuune (LonelyKitsuune), derived by
-reverse-engineering their compiled binaries. That attribution, and the permission
-requirement attached to it, are recorded in `CREDITS.md`. Read it before any
-public release.
+surface. SkyrimBridge's public package excludes the private native ENB-plugin
+replacement suite. The provenance record for that private, binary-reversed,
+not-clean-room work by reference to plugins authored by Kitsuune
+(LonelyKitsuune), and the permission requirement attached to it, are recorded in
+`CREDITS.md`. Read it before any public release.
 
 ## CommonLibSSE-NG 3.7.0
 

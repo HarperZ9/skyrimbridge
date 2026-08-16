@@ -31,29 +31,32 @@ FIXED_ZIP_TIMESTAMP = (2000, 1, 1, 0, 0, 0)
 
 CONFIG_FILES = (
     "SkyrimBridge.ini",
-    "Sky.ini",
     "WeatherParams.ini",
     "WriteBackConfig.ini",
     "GPU.ini",
-    "WeatherRouting.example.ini",
 )
 
-# Configs owned by the Kitsuune-derived native replacement suite. A build made
-# with SKYRIMBRIDGE_NATIVE_REPLACEMENTS=OFF has no code that reads these, so
-# shipping them would hand the user settings for features the binary does not
-# have. See CREDITS.md.
-NATIVE_SUITE_CONFIGS = frozenset({"Sky.ini", "WeatherRouting.example.ini"})
-
-# The marker used to decide which kind of build is being packaged. Read from the
-# compiled bytes rather than from a CMake variable, so the archive contents can
-# never disagree with the binary they ship beside.
-NATIVE_SUITE_MARKER = b"SkyLighting"
+# Markers unique to the Kitsuune-derived native replacement suite. A public
+# package is never allowed to carry any of these in the SKSE plugin binary. Read
+# compiled bytes rather than trusting a CMake variable, so the archive contents
+# can never disagree with the binary they ship beside.
+NATIVE_SUITE_MARKERS = (
+    b"SkyLighting",
+    b"EnbLightInventoryFix",
+    b"KreateProfile",
+    b"KreateRecords",
+    b"EditorIDCache",
+    b"LoadKreateProfile",
+    b"Sky.ini",
+    b"WeatherRouting.ini",
+)
 
 PUBLIC_FILES = (
     ("README.md", "Docs/README.md"),
     ("CHANGELOG.md", "Docs/CHANGELOG.md"),
     ("LICENSE", "Docs/LICENSE"),
     ("THIRD_PARTY_NOTICES.md", "Docs/THIRD_PARTY_NOTICES.md"),
+    ("docs/BRIDGE-ABI.md", "Docs/BRIDGE-ABI.md"),
     ("docs/USER-GUIDE.md", "Docs/USER-GUIDE.md"),
     ("docs/GPU.md", "Docs/GPU.md"),
     ("docs/parameters.md", "Docs/parameters.md"),
@@ -62,6 +65,8 @@ PUBLIC_FILES = (
     ("shaders/enbUI_SkyrimBridge.fxh", "Shaders/enbUI_SkyrimBridge.fxh"),
     ("shaders/SkyrimBridge.fxh", "Shaders/SkyrimBridge.fxh"),
     ("shaders/SkyrimBridge_CB.fxh", "Shaders/SkyrimBridge_CB.fxh"),
+    ("include/SkyrimBridgeAPI.h", "SDK/SkyrimBridgeAPI.h"),
+    ("src/core/BridgeData.h", "SDK/core/BridgeData.h"),
     ("tools/sb_command_client.py", "Tools/sb_command_client.py"),
     ("tools/sb_smoke_tour.py", "Tools/sb_smoke_tour.py"),
     ("tools/SkyrimBridgeClient.h", "Tools/SkyrimBridgeClient.h"),
@@ -78,6 +83,50 @@ GPU_PROXY_README = (
     "ProxyLibrary in the [PROXY] section of enblocal.ini.\r\n"
     "Do not replace ENB's own d3d11.dll; chain instead.\r\n"
     "Without the proxy the rest of the plugin works normally.\r\n"
+).encode("ascii")
+
+PUBLIC_SKYRIMBRIDGE_INI = (
+    "; =============================================================================\r\n"
+    ";  SkyrimBridge.ini -- public runtime configuration\r\n"
+    ";\r\n"
+    ";  The public archive excludes the private native ENB-plugin replacement\r\n"
+    ";  suite from the binary and does not ship its config files. This file keeps\r\n"
+    ";  only public feature toggles for the packaged build.\r\n"
+    "; =============================================================================\r\n"
+    "\r\n"
+    "[Native]\r\n"
+    "EngineFixes          = true    ; recovered AE spin-lock patch (REL::ID 68233), validated before write\r\n"
+    "\r\n"
+    "; Foreign-texture integration (both ship OFF: enable, validate in-game).\r\n"
+    ";   TextureAutoConvert  background scan at data-load: every textures\\*.png/.tga/.bmp\r\n"
+    ";                       without a .dds sibling is transcoded next to it (additive,\r\n"
+    ";                       never overwrites). Console: TextureScanNow true|false (dry/live).\r\n"
+    ";   TextureLoadHook     in-flight substitution: a missing textures\\*.dds with a\r\n"
+    ";                       foreign sibling is transcoded once into SkyrimBridge/texcache\r\n"
+    ";                       and served through the engine's own loose-file stream.\r\n"
+    "TextureAutoConvert   = false\r\n"
+    "TextureLoadHook      = false\r\n"
+    "\r\n"
+    "; External command channel (ships OFF). A second shared-memory region\r\n"
+    "; (\"SkyrimBridge_Command\") lets an external tool drive EngineReflect,\r\n"
+    "; RegionWalker, TextureCodec, and ModelCodec without the in-game console.\r\n"
+    "; One request dispatched per frame, SEH-isolated; protocol + verb table in\r\n"
+    "; src/SB_CommandLayout.h.\r\n"
+    "CommandSurface       = false\r\n"
+    "\r\n"
+    "[TextureConvert]\r\n"
+    "Format  = BC3     ; BC1 (opaque) | BC3 (alpha) | BC7 (DX10, mode-6 baseline) | RGBA8\r\n"
+    "Mipmaps = true\r\n"
+    "Refresh = false   ; re-convert when the source is newer than the .dds\r\n"
+    "Root    = Data/Textures\r\n"
+    "\r\n"
+    "; Alpha-coverage-preserving mipmaps for alpha-tested foliage (leaves, grass).\r\n"
+    "; Plain box-filter mips dilute alpha every level until foliage thins out and\r\n"
+    "; vanishes at distance. When on, each generated mip's alpha is rescaled so the\r\n"
+    "; fraction of texels passing the alpha test stays at the top level's coverage.\r\n"
+    "; No effect on BC1 (no alpha channel) or on the top mip itself.\r\n"
+    "CoverageMips      = false\r\n"
+    "CoverageThreshold = 128   ; alpha-test cutoff (NiAlphaProperty commonly ~128)\r\n"
 ).encode("ascii")
 
 
@@ -132,6 +181,18 @@ def validate_x64_pe(path: Path, label: str) -> None:
         )
 
 
+def reject_native_suite_markers(path: Path) -> None:
+    data = path.read_bytes()
+    found = sorted(marker.decode("ascii") for marker in NATIVE_SUITE_MARKERS if marker in data)
+    if found:
+        raise ValueError(
+            f"{path} contains Kitsuune-derived native replacement suite marker(s): "
+            f"{', '.join(found)}. Public packages must be built with "
+            "-DSKYRIMBRIDGE_NATIVE_REPLACEMENTS=OFF; no private-success payload "
+            "is produced."
+        )
+
+
 def checked_destination(stage: Path, relative: str) -> Path:
     posix_path = PurePosixPath(relative)
     if posix_path.is_absolute() or ".." in posix_path.parts:
@@ -150,25 +211,27 @@ def copy_payload(source: Path, stage: Path, relative: str) -> None:
     shutil.copyfile(source, destination)
 
 
+def write_public_text_payload(data: bytes, stage: Path, relative: str) -> None:
+    destination = checked_destination(stage, relative)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(data)
+
+
 def assemble_stage(root: Path, build_dir: Path, stage: Path, version: str) -> list[str]:
     plugin = build_dir / "Release" / "SkyrimBridge.dll"
     proxy = build_dir / "Release" / "d3d11.dll"
     validate_x64_pe(plugin, "SKSE plugin")
     validate_x64_pe(proxy, "GPU proxy")
+    reject_native_suite_markers(plugin)
 
     copy_payload(plugin, stage, "SKSE/Plugins/SkyrimBridge.dll")
 
-    has_native_suite = NATIVE_SUITE_MARKER in plugin.read_bytes()
-    configs = [
-        name for name in CONFIG_FILES
-        if has_native_suite or name not in NATIVE_SUITE_CONFIGS
-    ]
-    for name in configs:
-        copy_payload(
-            root / "config" / name,
-            stage,
-            f"SKSE/Plugins/SkyrimBridge/{name}",
-        )
+    for name in CONFIG_FILES:
+        relative = f"SKSE/Plugins/SkyrimBridge/{name}"
+        if name == "SkyrimBridge.ini":
+            write_public_text_payload(PUBLIC_SKYRIMBRIDGE_INI, stage, relative)
+        else:
+            copy_payload(root / "config" / name, stage, relative)
     for source, destination in PUBLIC_FILES:
         copy_payload(root / Path(source), stage, destination)
 

@@ -45,10 +45,10 @@ SkyrimBridge is several tools in one plugin. Use only the parts you need.
   (the full 487-field record), climates, lighting templates, water, effect
   shaders, lights, regions, worldspaces, grass, land textures, trees, and
   more. 827 fields in total, all named.
-- A native replacement suite for the third-party ENB plugins presets used to
-  depend on: per-worldspace weather routing, a celestial lighting model with
-  optional orbital sun, an inventory-light fix, and a recovered engine patch.
-  It uses its own flat INI files, with no external loader or config format.
+- SkyrimBridge detects the original Kitsuune ENB plugins when they are present
+  and defers to them. The public archive does not contain SkyrimBridge's
+  private native replacement-suite implementation; use the original plugins
+  for those features.
 
 **For texture and model creators**
 - A foreign texture pipeline: decode PNG, TGA, and BMP, and read and write DDS
@@ -139,15 +139,17 @@ The plugin reads plain INI files from `Data/SKSE/Plugins/SkyrimBridge/`:
 
 | File | Controls |
 |---|---|
-| `SkyrimBridge.ini` | The native ENB-plugin replacements and the texture and command-channel features |
-| `Sky.ini` | The celestial lighting model and orbital sun |
+| `SkyrimBridge.ini` | Core plugin toggles, texture pipeline options, and command-channel features |
 | `WeatherParams.ini` | The weather parameter mapping published to ENB |
 | `WriteBackConfig.ini` | The write-back rules from parameters to engine targets |
 | `GPU.ini` | The GPU rendering tier |
-| `WeatherRouting.ini` | Per-worldspace weather lists (an example is shipped) |
 
 Each file is commented, and every feature that changes engine state defaults
 to off.
+
+The public archive intentionally does not ship `Sky.ini` or
+`WeatherRouting.example.ini`; those belong to the private native replacement
+suite that is excluded from public packages.
 
 ## Building from source
 
@@ -161,6 +163,9 @@ cmake --build build --config Release
 The `commonlibsse-ng` dependency resolves through the vcpkg manifest
 (`vcpkg.json`) in this repository. The output is `SkyrimBridge.dll`. The
 optional D3D11 proxy builds as `d3d11.dll` from the same tree.
+
+Public builds are the default: `SKYRIMBRIDGE_NATIVE_REPLACEMENTS` is `OFF`
+unless a private operator build explicitly configures it `ON`.
 
 ## Repository layout
 

@@ -309,13 +309,10 @@ Console form: `cgf "SkyrimBridge.<name>" <args...>`
 | ForceWeatherByID | `void (int formID)` |
 | ClearForcedWeather | `void ()` |
 
-**KreatE profiles**
-| Native | Signature |
-|---|---|
-| LoadKreateProfile | `int (string name)` |
-| KreateProfileCount | `int ()` |
-| KreateProfileNameAt | `string (int index)` |
-| ActiveKreateProfile | `string ()` |
+**Private profile-loader commands**
+
+The binary-reversed profile-loader natives are part of the private
+native-suite track and are excluded from public release packages.
 
 **EngineReflect**
 | Native | Signature |

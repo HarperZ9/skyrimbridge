@@ -1,14 +1,21 @@
 # SkyrimBridge in-game validation (gated features)
 
-Every feature below ships OFF. This is the acceptance procedure for the
-features that change engine state: enable one at a time, run the steps,
-record the result, and only then decide whether to keep it on. The offline
-receipts (the `tests/` harnesses) cover the math and codecs; this covers the
-live engine behavior they cannot.
+Every public feature below ships OFF. This is the acceptance procedure for the
+features that change engine state: enable one at a time, run the steps, record
+the result, and only then decide whether to keep it on. The offline receipts
+(the `tests/` harnesses) cover the math and codecs; this covers the live engine
+behavior they cannot.
+
+Public release note: the Kitsuune-derived native replacement suite is excluded
+from public binaries and public archives. The private-only scenarios for
+EnbLightInventoryFix, dynamic night ambient, and orbital sun repositioning are
+kept here as provenance/engineering notes, not as public package claims. Public
+archives do not ship `Sky.ini` or `WeatherRouting.example.ini`.
 
 **Paths**
-- Config: `Data/SKSE/Plugins/SkyrimBridge/SkyrimBridge.ini` (and `Sky.ini`
-  next to it), under your Skyrim `Data` folder or your mod manager's view of it.
+- Config: public settings live under `Data/SKSE/Plugins/SkyrimBridge/` in your
+  Skyrim `Data` folder or your mod manager's view of it. Private native-suite
+  builds may add `Sky.ini`; public packages do not.
 - Log: `Documents\My Games\Skyrim Special Edition\SKSE\SkyrimBridge.log`.
 - Configs load once at data load: restart the game after every toggle change.
 
@@ -19,16 +26,16 @@ two of them (the texture pair) actively mask each other.
 
 | # | Feature | Toggle | Init log line to grep |
 |---|---|---|---|
-| 1 | EnbLightInventoryFix | `[Native] EnbLightInventoryFix` | `EnbLightInventoryFix: installed inventory-3D light hooks` |
-| 2 | Dynamic night ambient | `Sky.ini [Sky] Enable` | `SkyLighting: loaded Sky.ini (masterEnable=true` |
-| 3 | Orbital sun repositioning | `[Sky] Enable` + `[Orbit] MoveSun` | `SkyLighting: MoveSun armed` |
+| 1 | EnbLightInventoryFix (private-only) | `[Native] EnbLightInventoryFix` | `EnbLightInventoryFix: installed inventory-3D light hooks` |
+| 2 | Dynamic night ambient (private-only) | `Sky.ini [Sky] Enable` | `SkyLighting: loaded Sky.ini (masterEnable=true` |
+| 3 | Orbital sun repositioning (private-only) | `[Sky] Enable` + `[Orbit] MoveSun` | `SkyLighting: MoveSun armed` |
 | 4 | TextureAutoConvert | `[Native] TextureAutoConvert` | `TextureAutoConvert: scan done` |
 | 5 | TextureLoadHook | `[Native] TextureLoadHook` | `TextureLoadHook: LooseFileLocation detours installed` |
 | 6 | CommandSurface | `[Native] CommandSurface` | `BridgeCommand: command channel active` |
 
 ---
 
-## 1. EnbLightInventoryFix
+## 1. EnbLightInventoryFix (private native-suite validation only)
 
 Replaces ELIF.dll (inventory-3D previews leaking ENB particle light into the
 world). AE-only; trampoline detours on AE IDs 51769/51770.
@@ -51,7 +58,7 @@ while the preview is up; the preview itself still renders lit; no crash.
 
 **Record:** ok vs partial; any visual difference from how real ELIF behaved.
 
-## 2. Dynamic night ambient (`[Sky] Enable`)
+## 2. Dynamic night ambient (`[Sky] Enable`, private native-suite validation only)
 
 **Setup:** `Sky.ini`: `[Sky] Enable = true`, `[Orbit] MoveSun = false`
 (default), `[Ambient] Enable = true` (default).
@@ -71,7 +78,7 @@ flicker); day is untouched.
 **Record:** whether the strength suits the preset (tune `[Ambient] TiltScale`
 and `[NightSky]` values before judging the mechanism).
 
-## 3. Orbital sun repositioning (`[Orbit] MoveSun`)
+## 3. Orbital sun repositioning (`[Orbit] MoveSun`, private native-suite validation only)
 
 The AELAS-replacement behavior. The reversal proved AELAS's own IDs are not
 bindable; this implementation redirects `Sky->sun->sunBaseNode` through
@@ -355,8 +362,9 @@ needs a fix); the geometry block itself is corpus-proven byte-exact.
 
 ## After a PASS
 
-Defaults stay OFF until you flips them. When one flips, change BOTH
-copies of the config (the installed INI and `config/SkyrimBridge.ini` or
-`config/Sky.ini` in the repo) in the same commit, and note the validation
-date in the commit message. A FAIL goes back to OFF and the observations go
-into the lane's honest nulls.
+Defaults stay OFF until you flip them. When a public feature flips, change both
+copies of the config (the installed INI and the matching public config in this
+repository) in the same commit, and note the validation date in the commit
+message. Private native-suite builds have their own excluded config files and
+release gate. A FAIL goes back to OFF and the observations go into the lane's
+honest nulls.
