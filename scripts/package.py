@@ -307,6 +307,7 @@ def assemble_stage(root: Path, build_dir: Path, stage: Path, version: str) -> li
     validate_x64_pe(plugin, "SKSE plugin")
     validate_x64_pe(proxy, "GPU proxy")
     reject_native_suite_markers(plugin)
+    reject_native_suite_markers(proxy)
 
     copy_payload(plugin, stage, "SKSE/Plugins/SkyrimBridge.dll")
 

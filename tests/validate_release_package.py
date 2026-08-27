@@ -170,9 +170,26 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def check_marker_table_matches_packager() -> None:
+    # The packager keeps its own copy of NATIVE_SUITE_MARKERS so each side
+    # stays standalone. A marker added to one table and not the other would
+    # silently weaken whichever path runs, so equality is itself a test case.
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "skyrimbridge_packager", ROOT / "scripts" / "package.py"
+    )
+    packager = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(packager)
+    assert packager.NATIVE_SUITE_MARKERS == NATIVE_SUITE_MARKERS, (
+        "NATIVE_SUITE_MARKERS diverged between scripts/package.py and this test"
+    )
+
+
 def main() -> int:
     args = parse_args()
     build_dir = args.build_dir.resolve()
+    check_marker_table_matches_packager()
     check_native_suite_build_is_rejected()
 
     required_binaries = (
