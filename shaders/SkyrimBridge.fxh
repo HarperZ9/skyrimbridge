@@ -210,10 +210,10 @@ float4 SB_Shadow_Ambient;      // .rgb = shadow caster ambient color
 //─────────────────────────────────────────────────────────────────────────────
 
 float4 SB_FX_Vision;           // .x = nightEye, .y = detectLife,
-                                // .z = detectDead, .w = ethereal
+                                // .z = reserved (detectDead, always 0), .w = ethereal
 float4 SB_FX_Time;             // .x = slowTimeFactor, .y = timeStopped
 float4 SB_FX_Damage;           // .x = fire, .y = frost, .z = shock, .w = poison
-float4 SB_FX_Misc;             // .x = invisible, .y = paralyzed, .z = drunk
+float4 SB_FX_Misc;             // .x = invisible, .y = paralyzed, .z = reserved (drunk, always 0)
 
 
 //─────────────────────────────────────────────────────────────────────────────

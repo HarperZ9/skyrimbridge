@@ -101,10 +101,10 @@ float4 SB_Shadow_Diffuse      < string UIName = "SB_Shadow_Diffuse";      string
 float4 SB_Shadow_Ambient      < string UIName = "SB_Shadow_Ambient";      string UIWidget = "Color"; int UIHidden = 1; >; // .rgb = shadow caster ambient color
 
 // ---- 9. Effects (4 float4s) ----
-float4 SB_FX_Vision           < string UIName = "SB_FX_Vision";           string UIWidget = "Color"; int UIHidden = 1; >; // .x = nightEye(0/1), .y = detectLife(0/1), .z = detectDead(0/1), .w = etherealForm(0/1)
+float4 SB_FX_Vision           < string UIName = "SB_FX_Vision";           string UIWidget = "Color"; int UIHidden = 1; >; // .x = nightEye(0/1), .y = detectLife(0/1), .z = reserved (detectDead, no engine signal, always 0.0), .w = etherealForm(0/1)
 float4 SB_FX_Time             < string UIName = "SB_FX_Time";             string UIWidget = "Color"; int UIHidden = 1; >; // .x = slowTimeFactor, .y = isTimeStopped
 float4 SB_FX_Damage           < string UIName = "SB_FX_Damage";           string UIWidget = "Color"; int UIHidden = 1; >; // .x = fire(0/1), .y = frost(0/1), .z = shock(0/1), .w = poison(0/1)
-float4 SB_FX_Misc             < string UIName = "SB_FX_Misc";             string UIWidget = "Color"; int UIHidden = 1; >; // .x = invisible(0/1), .y = paralyzed(0/1), .z = drunk(0/1), .w = 0
+float4 SB_FX_Misc             < string UIName = "SB_FX_Misc";             string UIWidget = "Color"; int UIHidden = 1; >; // .x = invisible(0/1), .y = paralyzed(0/1), .z = reserved (drunk, no engine signal, always 0.0), .w = 0
 
 // ---- 10. Render State (3 float4s) ----
 // DepthParams removed — use SB_LinearizeDepth() which derives from Camera_Params

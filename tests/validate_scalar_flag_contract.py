@@ -21,9 +21,9 @@ SCALAR_PUBLIC_COMMENTS = {
     "src/core/BridgeData.h": [
         r"Float4\s+Flags;\s*//\s*\.x\s*=\s*isPleasant,\s*\.y\s*=\s*isCloudy,\s*\.z\s*=\s*isRainy,\s*\.w\s*=\s*isSnowy",
         r"Float4\s+IsInterior;\s*//\s*\.x\s*=\s*isInterior\(0/1\),\s*\.y\s*=\s*hasLightingTemplate,\s*\.z\s*=\s*0,\s*\.w\s*=\s*0",
-        r"Float4\s+VisionEffects;\s*//\s*\.x\s*=\s*nightEye\(0/1\),\s*\.y\s*=\s*detectLife\(0/1\),\s*\.z\s*=\s*detectDead\(0/1\),\s*\.w\s*=\s*etherealForm\(0/1\)",
+        r"Float4\s+VisionEffects;\s*//\s*\.x\s*=\s*nightEye\(0/1\),\s*\.y\s*=\s*detectLife\(0/1\),\s*\.z\s*=\s*reserved \(detectDead, no engine signal, always 0\.0\),\s*\.w\s*=\s*etherealForm\(0/1\)",
         r"Float4\s+DamageEffects;\s*//\s*\.x\s*=\s*isTakingFireDmg,\s*\.y\s*=\s*isTakingFrostDmg,\s*\.z\s*=\s*isTakingShockDmg,\s*\.w\s*=\s*isTakingPoisonDmg",
-        r"Float4\s+MiscEffects;\s*//\s*\.x\s*=\s*isInvisible,\s*\.y\s*=\s*isParalyzed,\s*\.z\s*=\s*isDrunk \(skooma/ale\),\s*\.w\s*=\s*0",
+        r"Float4\s+MiscEffects;\s*//\s*\.x\s*=\s*isInvisible,\s*\.y\s*=\s*isParalyzed,\s*\.z\s*=\s*reserved \(isDrunk, no engine signal, always 0\.0\),\s*\.w\s*=\s*0",
         r"Float4\s+Flags;\s*//\s*\.x\s*=\s*weaponDrawn\(0/1\),\s*\.y\s*=\s*hasBow\(0/1\),\s*\.z\s*=\s*hasTorch\(0/1\),\s*\.w\s*=\s*isTwoHanding\(0/1\)",
         r"Float4\s+Menus;\s*//\s*\.x\s*=\s*isInMenu\(0/1\),\s*\.y\s*=\s*isInDialogue\(0/1\),\s*\.z\s*=\s*isInInventory\(0/1\),\s*\.w\s*=\s*isInMap\(0/1\)",
         r"Float4\s+HUD;\s*//\s*\.x\s*=\s*isHUDVisible\(0/1\),\s*\.y\s*=\s*isCrosshairVisible\(0/1\),\s*\.z\s*=\s*isInCinematicMode\(0/1\),\s*\.w\s*=\s*isLoading\(0/1\)",
@@ -47,7 +47,7 @@ PUBLISHER_ASSIGNMENTS = {
     "src/core/EffectsTracker.cpp": [
         r"data\.VisionEffects\.x\s*=\s*hasNightEye\s*\?\s*1\.0f\s*:\s*0\.0f\s*;",
         r"data\.VisionEffects\.y\s*=\s*hasDetectLife\s*\?\s*1\.0f\s*:\s*0\.0f\s*;",
-        r"data\.VisionEffects\.z\s*=\s*hasDetectDead\s*\?\s*1\.0f\s*:\s*0\.0f\s*;",
+        r"data\.VisionEffects\.z\s*=\s*0\.0f\s*;\s*//\s*reserved:\s*no vendored archetype for detect-dead, see BridgeData\.h",
         r"data\.VisionEffects\.w\s*=\s*hasEthereal\s*\?\s*1\.0f\s*:\s*0\.0f\s*;",
         r"data\.DamageEffects\.x\s*=\s*hasFireDamage\s*\?\s*1\.0f\s*:\s*0\.0f\s*;",
         r"data\.DamageEffects\.y\s*=\s*hasFrostDamage\s*\?\s*1\.0f\s*:\s*0\.0f\s*;",
@@ -55,7 +55,7 @@ PUBLISHER_ASSIGNMENTS = {
         r"data\.DamageEffects\.w\s*=\s*hasPoisonDamage\s*\?\s*1\.0f\s*:\s*0\.0f\s*;",
         r"data\.MiscEffects\.x\s*=\s*hasInvisibility\s*\?\s*1\.0f\s*:\s*0\.0f\s*;",
         r"data\.MiscEffects\.y\s*=\s*hasParalysis\s*\?\s*1\.0f\s*:\s*0\.0f\s*;",
-        r"data\.MiscEffects\.z\s*=\s*hasDrunk\s*\?\s*1\.0f\s*:\s*0\.0f\s*;",
+        r"data\.MiscEffects\.z\s*=\s*0\.0f\s*;\s*//\s*reserved:\s*no vendored actor value or keyword for drunk, see BridgeData\.h",
         r"data\.MiscEffects\.w\s*=\s*0\.0f\s*;",
     ],
     "src/core/EquipmentTracker.cpp": [
@@ -83,9 +83,9 @@ PUBLISHER_ASSIGNMENTS = {
 CB_SCALAR_COMMENTS = {
     "SB_Weather_Flags": r"\.x = isPleasant\(0/1\), \.y = isCloudy\(0/1\), \.z = isRainy\(0/1\), \.w = isSnowy\(0/1\)",
     "SB_Interior_Flags": r"\.x = isInterior\(0/1\), \.y = hasLightingTemplate\(0/1\), \.z = 0, \.w = 0",
-    "SB_FX_Vision": r"\.x = nightEye\(0/1\), \.y = detectLife\(0/1\), \.z = detectDead\(0/1\), \.w = etherealForm\(0/1\)",
+    "SB_FX_Vision": r"\.x = nightEye\(0/1\), \.y = detectLife\(0/1\), \.z = reserved \(detectDead, no engine signal, always 0\.0\), \.w = etherealForm\(0/1\)",
     "SB_FX_Damage": r"\.x = fire\(0/1\), \.y = frost\(0/1\), \.z = shock\(0/1\), \.w = poison\(0/1\)",
-    "SB_FX_Misc": r"\.x = invisible\(0/1\), \.y = paralyzed\(0/1\), \.z = drunk\(0/1\), \.w = 0",
+    "SB_FX_Misc": r"\.x = invisible\(0/1\), \.y = paralyzed\(0/1\), \.z = reserved \(drunk, no engine signal, always 0\.0\), \.w = 0",
     "SB_Equip_Flags": r"\.x = weaponDrawn\(0/1\), \.y = hasBow\(0/1\), \.z = hasTorch\(0/1\), \.w = isTwoHanding\(0/1\)",
     "SB_UI_Menus": r"\.x = isInMenu\(0/1\), \.y = isInDialogue\(0/1\), \.z = isInInventory\(0/1\), \.w = isInMap\(0/1\)",
     "SB_UI_HUD": r"\.x = isHUDVisible\(0/1\), \.y = isCrosshairVisible\(0/1\), \.z = isInCinematicMode\(0/1\), \.w = isLoading\(0/1\)",

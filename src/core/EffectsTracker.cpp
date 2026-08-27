@@ -26,7 +26,6 @@ namespace SB::EffectsTracker
         // Accumulate public scalar flag components.
         bool hasNightEye     = false;
         bool hasDetectLife   = false;
-        bool hasDetectDead   = false;
         bool hasEthereal     = false;
         bool hasFireDamage   = false;
         bool hasFrostDamage  = false;
@@ -34,7 +33,6 @@ namespace SB::EffectsTracker
         bool hasPoisonDamage = false;
         bool hasInvisibility = false;
         bool hasParalysis    = false;
-        bool hasDrunk        = false;
 
         for (auto* ae : *activeEffects) {
             if (!ae || ae->flags.any(RE::ActiveEffect::Flag::kInactive))
@@ -85,7 +83,7 @@ namespace SB::EffectsTracker
 
         data.VisionEffects.x = hasNightEye ? 1.0f : 0.0f;
         data.VisionEffects.y = hasDetectLife ? 1.0f : 0.0f;
-        data.VisionEffects.z = hasDetectDead ? 1.0f : 0.0f;
+        data.VisionEffects.z = 0.0f;  // reserved: no vendored archetype for detect-dead, see BridgeData.h
         data.VisionEffects.w = hasEthereal ? 1.0f : 0.0f;
 
         data.DamageEffects.x = hasFireDamage ? 1.0f : 0.0f;
@@ -95,7 +93,7 @@ namespace SB::EffectsTracker
 
         data.MiscEffects.x = hasInvisibility ? 1.0f : 0.0f;
         data.MiscEffects.y = hasParalysis ? 1.0f : 0.0f;
-        data.MiscEffects.z = hasDrunk ? 1.0f : 0.0f;
+        data.MiscEffects.z = 0.0f;  // reserved: no vendored actor value or keyword for drunk, see BridgeData.h
         data.MiscEffects.w = 0.0f;
 
         return data;

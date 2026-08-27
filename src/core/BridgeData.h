@@ -139,13 +139,16 @@ namespace SB
     };
 
     // ── 9. ACTIVE MAGIC EFFECTS ─────────────────────────────────────────
+    // VisionEffects.z and MiscEffects.z are reserved: the vendored
+    // CommonLibSSE-NG archetype/actor-value/keyword surface has no signal
+    // for detect-dead or drunk/intoxication, so both publish 0.0 always.
 
     struct EffectsData
     {
-        Float4 VisionEffects;   // .x = nightEye(0/1), .y = detectLife(0/1), .z = detectDead(0/1), .w = etherealForm(0/1)
+        Float4 VisionEffects;   // .x = nightEye(0/1), .y = detectLife(0/1), .z = reserved (detectDead, no engine signal, always 0.0), .w = etherealForm(0/1)
         Float4 TimeEffects;     // .x = slowTimeFactor, .y = isTimeStopped, .z = 0, .w = 0
         Float4 DamageEffects;   // .x = isTakingFireDmg, .y = isTakingFrostDmg, .z = isTakingShockDmg, .w = isTakingPoisonDmg
-        Float4 MiscEffects;     // .x = isInvisible, .y = isParalyzed, .z = isDrunk (skooma/ale), .w = 0
+        Float4 MiscEffects;     // .x = isInvisible, .y = isParalyzed, .z = reserved (isDrunk, no engine signal, always 0.0), .w = 0
     };
 
     // ── 10. RENDER STATE ────────────────────────────────────────────────
