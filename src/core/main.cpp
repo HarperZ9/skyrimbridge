@@ -132,12 +132,20 @@ struct NativeConfig
     bool sky = true;
     bool enbLightInventoryFix = false;
 #endif
+#if SKYRIMBRIDGE_NATIVE_REPLACEMENTS
     bool engineFixes = true;    // recovered AE spin-lock patch; validated before write
+#else
+    bool engineFixes = false;   // public builds never write engine memory unless the INI opts in
+#endif
     bool textureAutoConvert = false;   // startup foreign-texture transcode (opt-in)
     bool textureLoadHook = false;      // in-flight foreign-texture substitution (opt-in)
     bool commandSurface = false;       // external command channel (opt-in)
 };
 static NativeConfig s_native;
+#if !SKYRIMBRIDGE_NATIVE_REPLACEMENTS
+static_assert(!NativeConfig{}.engineFixes,
+              "public builds must not write engine memory when the config file is absent");
+#endif
 
 static void LoadNativeConfig(const std::filesystem::path& configDir)
 {
