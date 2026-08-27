@@ -1,0 +1,579 @@
+# Review package: eaa0e2e..7d585bc
+
+## Commits
+7d585bc fix: harden the public bridge ABI contract
+
+## Files changed
+ .../task-1-report.md                               |  94 ++++++++++++++++-
+ .../plans/2026-08-15-w2-bridge-state-abi.md        | 114 +++++++++++++++++----
+ include/SkyrimBridgeAPI.h                          |  11 +-
+ tests/validate_bridge_abi_header.py                |  40 +++++++-
+ 4 files changed, 231 insertions(+), 28 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-08-15-w2-bridge-state-abi/task-1-report.md b/.superpowers/sdd/2026-08-15-w2-bridge-state-abi/task-1-report.md
+index 55cff73..b4165ee 100644
+--- a/.superpowers/sdd/2026-08-15-w2-bridge-state-abi/task-1-report.md
++++ b/.superpowers/sdd/2026-08-15-w2-bridge-state-abi/task-1-report.md
+@@ -1,42 +1,59 @@
+ # Task 1 report — Define the public ABI header
+ 
+ ## Scope
+ 
+ - Worktree: `C:\dev\skyrimbridge-worktrees\bridge-state-abi`
+ - Branch: `feat/bridge-state-abi`
+ - Owned files changed:
+   - `include/SkyrimBridgeAPI.h`
+   - `tests/validate_bridge_abi_header.py`
++  - `docs/superpowers/plans/2026-08-15-w2-bridge-state-abi.md`
+   - `.superpowers/sdd/2026-08-15-w2-bridge-state-abi/task-1-report.md`
+ 
+ ## Implementation
+ 
+ - Added public ABI version `SB::Api::kBridgeInterfaceVersion = 1U`.
+ - Added `SB::Api::BridgeInterface` with exact v1 field order:
+   1. `version`
+   2. `allDataSize`
+   3. `GetFrameIndex`
+   4. `GetFrameData`
+   5. `IsFrameValid`
+   6. `CopyFrameData`
+ - Appended `CopyFrameData(void* destination, uint32_t destinationSize, uint64_t* frameIndex)` after the plan's original fields.
+-- Preserved C linkage/export spelling:
+-  `extern "C" __declspec(dllexport) SB::Api::BridgeInterface* SB_GetBridgeInterface();`
++- Preserved C linkage while hiding producer export decoration behind
++  `SB_BRIDGE_API`:
++  `extern "C" SB_BRIDGE_API SB::Api::BridgeInterface* SB_GetBridgeInterface();`
++- Added `SKYRIMBRIDGE_BUILDING_DLL`/`SB_BRIDGE_API` so producer builds expand to
++  `__declspec(dllexport)` and consumer/GetProcAddress inclusion expands empty.
++- Documented that `SkyrimBridgeAPI.h` is a C++ header exposing a C-linkage
++  symbol, not a pure-C header.
+ - Added compile-time ABI assertions for `SB::Float4`, `SB::AllData`, and `SB::Api::BridgeInterface` using compiler layout/copyability traits, without STL-bearing public signatures or exceptions.
+ - Added a focused Python validator that enforces:
+   - exact field order,
+   - exact field signatures,
+   - version 1 unsigned literal,
+-  - export declaration spelling,
++  - producer-only export macro behavior,
++  - export declaration spelling through `SB_BRIDGE_API`,
++  - public C++/C-linkage/not-pure-C documentation,
+   - required static assertions,
+   - no STL includes or ABI-unsafe constructs in the public ABI header.
++- Updated Task 2 in `docs/superpowers/plans/2026-08-15-w2-bridge-state-abi.md`
++  so the future implementation:
++  - initializes all six v1 interface fields, including non-null
++    `&CopyFrameDataImpl`,
++  - publishes from a synchronized `SB::AllData` snapshot/double-buffer instead
++    of the mutating live `SB::GetMutableData()` block,
++  - requires tests for non-null callbacks and coherent copies,
++  - adds repository `include/` to the target include path,
++  - defines `SKYRIMBRIDGE_BUILDING_DLL` for the producer target.
+ 
+ ## TDD evidence
+ 
+ ### RED
+ 
+ Command:
+ 
+ ```powershell
+ python tests/validate_bridge_abi_header.py
+ ```
+@@ -103,17 +120,88 @@ python -m py_compile tests/validate_bridge_abi_header.py
+ ```
+ 
+ Observed:
+ 
+ ```text
+ validate_bridge_abi_header: all cases passed
+ ```
+ 
+ Both commands exited 0.
+ 
++## Review fix evidence
++
++Review base: `eaa0e2e`.
++
++### RED
++
++After adding validator checks for producer-only export macro behavior and
++C++/C-linkage documentation, the old header failed as expected:
++
++```text
++FAIL: SB_BRIDGE_API must dllexport only when SKYRIMBRIDGE_BUILDING_DLL is defined and expand empty for GetProcAddress consumers
++FAIL: the exported entry point must use extern C plus SB_BRIDGE_API
++FAIL: the consumer-visible declaration must not hard-code dllexport
++FAIL: missing public header documentation phrase: 'C++ header'
++FAIL: missing public header documentation phrase: 'C-linkage symbol'
++FAIL: missing public header documentation phrase: 'not a pure-C header'
++```
++
++### GREEN
++
++After adding `SB_BRIDGE_API`, `SKYRIMBRIDGE_BUILDING_DLL`, and the header
++documentation, the focused validator passed:
++
++```text
++validate_bridge_abi_header: all cases passed
++```
++
++### Review mutation proof
++
++Mutation: changed the consumer macro branch from empty to
++`__declspec(dllimport)`.
++
++Expected validator failure:
++
++```text
++FAIL: SB_BRIDGE_API must dllexport only when SKYRIMBRIDGE_BUILDING_DLL is defined and expand empty for GetProcAddress consumers
++FAIL: consumer inclusion must not force dllimport; consumers use GetProcAddress
++```
++
++Mutation: changed the export declaration back to direct
++`extern "C" __declspec(dllexport)`.
++
++Expected validator failure:
++
++```text
++FAIL: dllexport must appear exactly once, inside the SB_BRIDGE_API producer macro
++FAIL: the exported entry point must use extern C plus SB_BRIDGE_API
++FAIL: the consumer-visible declaration must not hard-code dllexport
++```
++
++Both mutations were reverted before final verification.
++
++### Final review-focused verification
++
++Commands:
++
++```powershell
++python tests/validate_bridge_abi_header.py
++python -c "import pathlib; compile(pathlib.Path('tests/validate_bridge_abi_header.py').read_text(encoding='utf-8'), 'tests/validate_bridge_abi_header.py', 'exec')"
++git diff --check
++```
++
++Observed:
++
++```text
++validate_bridge_abi_header: all cases passed
++```
++
++All three commands exited 0. `git diff --check` produced no whitespace or patch
++hygiene findings.
++
+ ## Compile-check note
+ 
+ No C++ compiler was available on PATH in this environment during verification (`cl`, `clang++`, `clang-cl`, `g++`, `gcc`, and `c++` were absent). The header still contains compile-time static assertions for MSVC/clang-compatible C++ type-trait builtins so the ABI layout/copyability checks run when the project is compiled in the intended toolchain.
+ 
+ ## Index note
+ 
+ The required read-only `index` orientation was attempted for `C:/dev` and then the isolated worktree; both calls timed out before returning a map. Work then continued from the task brief, full plan, ledger, and direct repository inspection.
+diff --git a/docs/superpowers/plans/2026-08-15-w2-bridge-state-abi.md b/docs/superpowers/plans/2026-08-15-w2-bridge-state-abi.md
+index cb15fb4..eb60315 100644
+--- a/docs/superpowers/plans/2026-08-15-w2-bridge-state-abi.md
++++ b/docs/superpowers/plans/2026-08-15-w2-bridge-state-abi.md
+@@ -179,20 +179,21 @@ Swap the declaration order of `GetFrameIndex` and `GetFrameData` in the header a
+ git add include/SkyrimBridgeAPI.h tests/validate_bridge_abi_header.py
+ git commit -m "feat: define the public SkyrimBridge state ABI"
+ ```
+ 
+ ---
+ 
+ ### Task 2: Implement and export the entry point
+ 
+ **Files:**
+ - Create: `src/core/BridgeApi.cpp`
++- Create: `tests/validate_bridge_abi_implementation.py`
+ - Modify: `CMakeLists.txt`
+ - Modify: `src/core/main.cpp:326` and the shutdown path
+ 
+ **Interfaces:**
+ - Consumes: `SB::Api::BridgeInterface` and `kBridgeInterfaceVersion` from Task 1.
+ - Produces: the exported symbol `SB_GetBridgeInterface` in the built DLL. Task 3 asserts its presence.
+ 
+ - [ ] **Step 1: Write the failing test**
+ 
+ Create `tests/validate_bridge_abi_export.py`. It reads the PE export directory directly, so it needs no build tooling and no third-party module.
+@@ -269,150 +270,225 @@ def main() -> int:
+         print(f"FAIL: {missing} is not exported")
+     if not failures:
+         print(f"validate_bridge_abi_export: {len(names)} exports, all required present")
+     return 1 if failures else 0
+ 
+ 
+ if __name__ == "__main__":
+     sys.exit(main())
+ ```
+ 
++Also create `tests/validate_bridge_abi_implementation.py` as a source-level
++contract check for `src/core/BridgeApi.cpp` while the DLL is still awkward to
++load outside the SKSE runtime. It must fail unless:
++
++- `BridgeInterface g_interface` initializes all six v1 fields, including a
++  non-null `&CopyFrameDataImpl` callback appended after `&IsFrameValidImpl`.
++- `GetFrameDataImpl` returns a published snapshot buffer, never the mutating
++  live `SB::GetMutableData()` block.
++- `CopyFrameDataImpl` rejects null destinations and undersized buffers, copies
++  exactly `sizeof(SB::AllData)`, and writes a frame index coherent with the
++  copied snapshot when `frameIndex` is non-null.
++- `MarkFramePublished(const SB::AllData& publishedData)` copies the sanitized
++  frame into a synchronized published snapshot/double-buffer before advancing
++  the public frame counter.
++- `CMakeLists.txt` adds repository `include/` to the plugin target include
++  paths and defines `SKYRIMBRIDGE_BUILDING_DLL` for the producer target.
++
+ - [ ] **Step 2: Run the test to verify it fails**
+ 
+ Build first, then run against the built DLL:
+ 
+ ```bash
+ python tests/validate_bridge_abi_export.py build/Release/SkyrimBridge.dll
++python tests/validate_bridge_abi_implementation.py
+ ```
+ 
+-Expected: FAIL with "SB_GetBridgeInterface is not exported". `SB_GetProxyInterface` passes, which confirms the parser works rather than reporting a false negative on both.
++Expected: export validator fails with "SB_GetBridgeInterface is not exported".
++`SB_GetProxyInterface` passes, which confirms the parser works rather than
++reporting a false negative on both. The implementation validator fails because
++`src/core/BridgeApi.cpp` is absent.
+ 
+ - [ ] **Step 3: Implement the entry point**
+ 
+ Create `src/core/BridgeApi.cpp`:
+ 
+ ```cpp
+ #include "SkyrimBridgeAPI.h"
+ 
+ #include <atomic>
++#include <cstring>
++#include <mutex>
+ 
+ #include "core/BridgeData.h"
+ 
+ namespace SB::Api
+ {
+     namespace
+     {
+-        std::atomic<std::uint64_t> g_frameIndex{0};
+-        std::atomic<bool>          g_frameValid{false};
++        std::atomic<uint64_t> g_frameIndex{0};
++        std::atomic<bool>     g_frameValid{false};
++
++        std::mutex           g_snapshotMutex;
++        SB::AllData          g_snapshots[2]{};
++        std::atomic<uint32_t> g_publishedSlot{0};
++        uint64_t             g_publishedFrameIndex = 0;
+ 
+-        std::uint64_t GetFrameIndexImpl()
++        uint64_t GetFrameIndexImpl()
+         {
+             return g_frameIndex.load(std::memory_order_acquire);
+         }
+ 
+         const SB::AllData* GetFrameDataImpl()
+         {
+-            // GetMutableData is the existing accessor, used by the frame loop at
+-            // src/core/main.cpp:255. This hands out a const view of that same
+-            // block; it does not copy and does not own.
+-            return &SB::GetMutableData();
++            if (!g_frameValid.load(std::memory_order_acquire)) {
++                return nullptr;
++            }
++            const uint32_t slot = g_publishedSlot.load(std::memory_order_acquire);
++            return &g_snapshots[slot];
+         }
+ 
+         bool IsFrameValidImpl()
+         {
+             return g_frameValid.load(std::memory_order_acquire);
+         }
+ 
++        bool CopyFrameDataImpl(void* destination, uint32_t destinationSize, uint64_t* frameIndex)
++        {
++            if (!destination || destinationSize < sizeof(SB::AllData)) {
++                return false;
++            }
++
++            std::lock_guard lock(g_snapshotMutex);
++            if (!g_frameValid.load(std::memory_order_acquire)) {
++                return false;
++            }
++
++            const uint32_t slot = g_publishedSlot.load(std::memory_order_acquire);
++            std::memcpy(destination, &g_snapshots[slot], sizeof(SB::AllData));
++            if (frameIndex) {
++                *frameIndex = g_publishedFrameIndex;
++            }
++            return true;
++        }
++
+         BridgeInterface g_interface{
+             kBridgeInterfaceVersion,
+-            static_cast<std::uint32_t>(sizeof(SB::AllData)),
++            static_cast<uint32_t>(sizeof(SB::AllData)),
+             &GetFrameIndexImpl,
+             &GetFrameDataImpl,
+             &IsFrameValidImpl,
++            &CopyFrameDataImpl,
+         };
+     }
+ 
+-    void MarkFramePublished()
++    void MarkFramePublished(const SB::AllData& publishedData)
+     {
+-        g_frameIndex.fetch_add(1, std::memory_order_release);
++        std::lock_guard lock(g_snapshotMutex);
++
++        const uint32_t currentSlot = g_publishedSlot.load(std::memory_order_relaxed);
++        const uint32_t nextSlot = 1U - currentSlot;
++        g_snapshots[nextSlot] = publishedData;
++        g_publishedSlot.store(nextSlot, std::memory_order_release);
++
++        ++g_publishedFrameIndex;
++        g_frameIndex.store(g_publishedFrameIndex, std::memory_order_release);
+         g_frameValid.store(true, std::memory_order_release);
+     }
+ 
+     void MarkTeardown()
+     {
+         g_frameValid.store(false, std::memory_order_release);
+     }
+ }
+ 
+-extern "C" __declspec(dllexport) SB::Api::BridgeInterface* SB_GetBridgeInterface()
++extern "C" SB_BRIDGE_API SB::Api::BridgeInterface* SB_GetBridgeInterface()
+ {
+     return &SB::Api::g_interface;
+ }
+ ```
+ 
++This implementation must publish only the copied `publishedData` snapshot.
++`GetFrameDataImpl` may expose the current snapshot pointer for short-lived
++compatibility, but it must never return `&SB::GetMutableData()` or any other
++mutating live producer block. `CopyFrameDataImpl` is the coherent consumer path:
++it takes the same lock used by publication, copies one complete `SB::AllData`
++snapshot, and returns the matching `g_publishedFrameIndex`.
++
+ Declare the two lifecycle helpers at the end of the `SB::Api` namespace in `include/SkyrimBridgeAPI.h`, inside a block marked internal so consumers do not call them:
+ 
+ ```cpp
+ namespace SB::Api
+ {
+     // Internal. Called by the publish path, not by consumers.
+-    void MarkFramePublished();
++    void MarkFramePublished(const SB::AllData& publishedData);
+     void MarkTeardown();
+ }
+ ```
+ 
+-Add `src/core/BridgeApi.cpp` to the plugin target's source list in `CMakeLists.txt`.
++Add `src/core/BridgeApi.cpp` to the plugin target's source list in
++`CMakeLists.txt`. Also add repository `include/` to that target's include
++directories so `#include "SkyrimBridgeAPI.h"` resolves, and define
++`SKYRIMBRIDGE_BUILDING_DLL=1` for the producer target so `SB_BRIDGE_API`
++expands to `__declspec(dllexport)` only while building SkyrimBridge.
+ 
+ - [ ] **Step 4: Call the lifecycle hooks from the existing publish path**
+ 
+ The frame loop lives in `src/core/main.cpp`. It acquires the block at line 255 with `SB::AllData& data = SB::GetMutableData();`, sanitizes it at line 313 with `SanitizeAllData(data)`, and pushes to ENB at line 326 with `ENBInterface::PushAllData(data)`.
+ 
+ Add the publish mark immediately after line 326, so the counter only advances once the block is fully populated and sanitized:
+ 
+ ```cpp
+     ENBInterface::PushAllData(data);
+-    SB::Api::MarkFramePublished();
++    SB::Api::MarkFramePublished(data);
+ ```
+ 
+ Add the teardown mark in the plugin's shutdown path, before any state the block points at is released:
+ 
+ ```cpp
+     SB::Api::MarkTeardown();
+ ```
+ 
+ Include `SkyrimBridgeAPI.h` in `src/core/main.cpp`.
+ 
+-This is the only change to existing behaviour. It advances a counter after the ENB push has already happened; it does not alter any value the ENB path reads, and it cannot reorder or delay that push.
++This is the only change to existing behaviour. It copies the sanitized frame
++into the synchronized published snapshot after the ENB push has already
++happened; it does not alter any value the ENB path reads, and it cannot reorder
++or delay that push.
+ 
+-- [ ] **Step 5: Run both tests to verify they pass**
++- [ ] **Step 5: Run the focused tests to verify they pass**
+ 
+ ```bash
+ python tests/validate_bridge_abi_header.py
+ python tests/validate_bridge_abi_export.py build/Release/SkyrimBridge.dll
++python tests/validate_bridge_abi_implementation.py
+ ```
+ 
+-Expected: both report all cases passed.
++Expected: all three report all cases passed. The implementation validator must
++prove the v1 `CopyFrameData` callback is non-null in the initializer and that
++published copies come from the synchronized snapshot path rather than
++`SB::GetMutableData()`.
+ 
+ - [ ] **Step 6: Verify the ENB path is unchanged**
+ 
+ Run the existing validator suite:
+ 
+ ```bash
+ python tests/validate_command_protocol.py
+ ```
+ 
+ Expected: unchanged from its pre-task result. If this regresses, the lifecycle hook was placed inside the ENB publish loop rather than after it.
+ 
+ - [ ] **Step 7: Commit**
+ 
+ ```bash
+-git add include/SkyrimBridgeAPI.h src/core/BridgeApi.cpp src/core/main.cpp CMakeLists.txt tests/validate_bridge_abi_export.py
++git add include/SkyrimBridgeAPI.h src/core/BridgeApi.cpp src/core/main.cpp CMakeLists.txt tests/validate_bridge_abi_export.py tests/validate_bridge_abi_implementation.py
+ git commit -m "feat: export the versioned bridge state interface"
+ ```
+ 
+ ---
+ 
+ ### Task 3: Document the consumer contract
+ 
+ **Files:**
+ - Create: `docs/BRIDGE-ABI.md`
+ - Modify: `README.md`
+diff --git a/include/SkyrimBridgeAPI.h b/include/SkyrimBridgeAPI.h
+index 89caabb..da0ccf3 100644
+--- a/include/SkyrimBridgeAPI.h
++++ b/include/SkyrimBridgeAPI.h
+@@ -5,26 +5,35 @@
+ //  Resolve at runtime, never by linking:
+ //
+ //    auto mod = GetModuleHandleW(L"SkyrimBridge.dll");
+ //    auto get = reinterpret_cast<SB::Api::BridgeInterface* (*)()>(
+ //        GetProcAddress(mod, "SB_GetBridgeInterface"));
+ //    auto* api = get ? get() : nullptr;
+ //
+ //  A consumer must check both version and allDataSize before dereferencing
+ //  GetFrameData, because a mismatched build has a different AllData layout.
+ //  Prefer CopyFrameData for cross-thread or long-lived reads.
++//
++//  This is a C++ header exposing a C-linkage symbol for GetProcAddress
++//  consumers; it is not a pure-C header because the payload type is SB::AllData.
+ //=============================================================================
+ 
+ #include <stdint.h>
+ 
+ #include "core/BridgeData.h"
+ 
++#if defined(SKYRIMBRIDGE_BUILDING_DLL)
++#  define SB_BRIDGE_API __declspec(dllexport)
++#else
++#  define SB_BRIDGE_API
++#endif
++
+ namespace SB::Api
+ {
+     // Bump on any additive change. Never reorder or renumber existing fields.
+     inline constexpr uint32_t kBridgeInterfaceVersion = 1U;
+ 
+     struct BridgeInterface
+     {
+         // Always kBridgeInterfaceVersion for the build that returned this.
+         uint32_t version;
+ 
+@@ -57,11 +66,11 @@ namespace SB::Api
+     static_assert(__is_standard_layout(SB::AllData),
+         "SB::AllData must stay standard-layout for the public ABI");
+     static_assert(__is_trivially_copyable(SB::AllData),
+         "SB::AllData must stay trivially copyable for the public ABI");
+     static_assert(__is_standard_layout(BridgeInterface),
+         "BridgeInterface must stay standard-layout for the public ABI");
+     static_assert(__is_trivially_copyable(BridgeInterface),
+         "BridgeInterface must stay trivially copyable for the public ABI");
+ }
+ 
+-extern "C" __declspec(dllexport) SB::Api::BridgeInterface* SB_GetBridgeInterface();
++extern "C" SB_BRIDGE_API SB::Api::BridgeInterface* SB_GetBridgeInterface();
+diff --git a/tests/validate_bridge_abi_header.py b/tests/validate_bridge_abi_header.py
+index 3db66e3..cba534a 100644
+--- a/tests/validate_bridge_abi_header.py
++++ b/tests/validate_bridge_abi_header.py
+@@ -84,23 +84,31 @@ REQUIRED_STATIC_ASSERTS = [
+     (
+         "BridgeInterface standard-layout",
+         r"static_assert\s*\(\s*__is_standard_layout\s*\(\s*BridgeInterface\s*\)",
+     ),
+     (
+         "BridgeInterface trivially copyable",
+         r"static_assert\s*\(\s*__is_trivially_copyable\s*\(\s*BridgeInterface\s*\)",
+     ),
+ ]
+ 
+-EXPORT_DECLARATION = (
+-    'extern "C" __declspec(dllexport) SB::Api::BridgeInterface* '
+-    "SB_GetBridgeInterface();"
++EXPORT_DECLARATION_RE = (
++    r'extern\s+"C"\s+SB_BRIDGE_API\s+SB::Api::BridgeInterface\s*\*\s*'
++    r"SB_GetBridgeInterface\s*\(\s*\)\s*;"
++)
++
++EXPORT_MACRO_RE = (
++    r"#\s*if\s+defined\s*\(\s*SKYRIMBRIDGE_BUILDING_DLL\s*\)\s*"
++    r"#\s*define\s+SB_BRIDGE_API\s+__declspec\s*\(\s*dllexport\s*\)\s*"
++    r"#\s*else\s*"
++    r"#\s*define\s+SB_BRIDGE_API\s*(?:\r?\n)\s*"
++    r"#\s*endif"
+ )
+ 
+ 
+ def strip_comments(text: str) -> str:
+     text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+     return re.sub(r"//.*", "", text)
+ 
+ 
+ def bridge_interface_body(text: str) -> str | None:
+     match = re.search(r"struct\s+BridgeInterface\s*\{(?P<body>.*?)^\s*\};", text, re.S | re.M)
+@@ -160,22 +168,44 @@ def main() -> int:
+             if not re.fullmatch(EXPECTED_SIGNATURES[name], statement):
+                 failures.append(f"wrong signature for BridgeInterface::{name}: {statement}")
+ 
+         for expected in EXPECTED_FIELDS:
+             if not any(field_name(statement) == expected for statement in statements):
+                 failures.append(f"missing BridgeInterface::{expected}")
+ 
+     if not re.search(r"\binline\s+constexpr\s+uint32_t\s+kBridgeInterfaceVersion\s*=\s*1U\s*;", code):
+         failures.append("kBridgeInterfaceVersion must be inline constexpr uint32_t version 1U")
+ 
+-    if EXPORT_DECLARATION not in code:
+-        failures.append("the exported entry point declaration is missing or misspelled")
++    if not re.search(EXPORT_MACRO_RE, code):
++        failures.append(
++            "SB_BRIDGE_API must dllexport only when SKYRIMBRIDGE_BUILDING_DLL is defined "
++            "and expand empty for GetProcAddress consumers"
++        )
++
++    if "__declspec(dllimport)" in code:
++        failures.append("consumer inclusion must not force dllimport; consumers use GetProcAddress")
++
++    dllexport_uses = re.findall(r"__declspec\s*\(\s*dllexport\s*\)", code)
++    if len(dllexport_uses) != 1:
++        failures.append(
++            "dllexport must appear exactly once, inside the SB_BRIDGE_API producer macro"
++        )
++
++    if not re.search(EXPORT_DECLARATION_RE, code):
++        failures.append("the exported entry point must use extern C plus SB_BRIDGE_API")
++
++    if re.search(r'extern\s+"C"\s+__declspec\s*\(\s*dllexport\s*\)', code):
++        failures.append("the consumer-visible declaration must not hard-code dllexport")
++
++    for phrase in ["C++ header", "C-linkage symbol", "not a pure-C header"]:
++        if phrase not in text:
++            failures.append(f"missing public header documentation phrase: {phrase!r}")
+ 
+     for label, pattern in REQUIRED_STATIC_ASSERTS:
+         if not re.search(pattern, code):
+             failures.append(f"missing static assertion: {label}")
+ 
+     for include in FORBIDDEN_INCLUDES:
+         if include in code:
+             failures.append(f"STL include in a public ABI header: {include!r}")
+ 
+     for token in FORBIDDEN_CODE_TOKENS:

@@ -1,0 +1,4 @@
+# Package payloads and compiled scratch objects stay local; the .sha256
+# files beside them are the committed provenance record.
+*.zip
+*.obj
