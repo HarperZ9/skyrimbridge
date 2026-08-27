@@ -438,6 +438,22 @@ void RunStandaloneFrameUpdate()
     RunFrameUpdate();
 }
 
+// ── Standalone teardown latch (called by D3D11Hook on WM_DESTROY) ───────────
+// OnENBCallback's OnExit case below already latches teardown when ENB drives
+// updates. Without ENB present, OnExit never fires, so the bridge kept
+// reporting the last published frame as valid after the game window closed.
+// The game's render window receives WM_DESTROY on normal exit, on the same
+// thread that pumps its own message loop, well before DllMain
+// DLL_PROCESS_DETACH runs and with none of its loader-lock hazards.
+// MarkTeardown() is idempotent, so calling it here too when ENB is present
+// changes nothing about the ENB OnExit sequence.
+void NotifyStandaloneWindowDestroyed()
+{
+    if (s_enbDrivesUpdates.load(std::memory_order_relaxed))
+        return;
+    SB::Api::MarkTeardown();
+}
+
 // ── ENB callback ─────────────────────────────────────────────────────────────
 // BeginFrame fires right after present, at the start of the next frame's CPU
 // work: parameters pushed here are consumed by the frame being built, and the

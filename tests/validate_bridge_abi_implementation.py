@@ -20,6 +20,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 BRIDGE_API = ROOT / "src" / "core" / "BridgeApi.cpp"
 HEADER = ROOT / "include" / "SkyrimBridgeAPI.h"
 MAIN = ROOT / "src" / "core" / "main.cpp"
+D3D11_HOOK = ROOT / "src" / "core" / "D3D11Hook.cpp"
 CMAKE = ROOT / "CMakeLists.txt"
 
 REQUIRED_EXPORTS = [b"SB_GetBridgeInterface"]
@@ -334,6 +335,60 @@ def check_source() -> list[str]:
                     failures.append("ENB OnExit must call SB::Api::MarkTeardown()")
                 elif release_positions and teardown_pos > min(release_positions):
                     failures.append("MarkTeardown must run before existing shutdown calls release producer state")
+
+        standalone_teardown = function_body(
+            main_code,
+            r"void\s+NotifyStandaloneWindowDestroyed\s*\(\s*\)",
+        )
+        if standalone_teardown is None:
+            failures.append("main.cpp must define NotifyStandaloneWindowDestroyed()")
+        else:
+            body_one_line = normalize(standalone_teardown)
+            guard_pos = body_one_line.find(
+                "if (s_enbDrivesUpdates.load(std::memory_order_relaxed)) return;"
+            )
+            teardown_call_pos = body_one_line.find("SB::Api::MarkTeardown();")
+            if guard_pos < 0:
+                failures.append(
+                    "NotifyStandaloneWindowDestroyed must skip the standalone latch when ENB drives updates"
+                )
+            if teardown_call_pos < 0:
+                failures.append("NotifyStandaloneWindowDestroyed must call SB::Api::MarkTeardown()")
+            elif guard_pos >= 0 and guard_pos > teardown_call_pos:
+                failures.append(
+                    "NotifyStandaloneWindowDestroyed must check the ENB guard before latching teardown"
+                )
+
+    if not D3D11_HOOK.is_file():
+        failures.append(f"D3D11Hook.cpp is absent: {D3D11_HOOK}")
+    else:
+        hook_text = D3D11_HOOK.read_text(encoding="utf-8")
+        hook_code = strip_comments(hook_text)
+        if not re.search(
+            r"extern\s+void\s+NotifyStandaloneWindowDestroyed\s*\(\s*\)\s*;",
+            hook_code,
+        ):
+            failures.append(
+                "D3D11Hook.cpp must declare extern void NotifyStandaloneWindowDestroyed();"
+            )
+
+        wnd_proc = function_body(
+            hook_code,
+            r"LRESULT\s+CALLBACK\s+HookedWndProc\s*\(\s*HWND\s+hWnd\s*,"
+            r"\s*UINT\s+uMsg\s*,\s*WPARAM\s+wParam\s*,\s*LPARAM\s+lParam\s*\)",
+        )
+        if wnd_proc is None:
+            failures.append("HookedWndProc was not found in D3D11Hook.cpp")
+        else:
+            wnd_proc_one_line = normalize(wnd_proc)
+            if (
+                "if (uMsg == WM_DESTROY) { NotifyStandaloneWindowDestroyed(); }"
+                not in wnd_proc_one_line
+            ):
+                failures.append(
+                    "HookedWndProc must call NotifyStandaloneWindowDestroyed() on WM_DESTROY "
+                    "so the standalone path latches teardown when ENB is absent"
+                )
 
     if not CMAKE.is_file():
         failures.append(f"CMakeLists.txt is absent: {CMAKE}")

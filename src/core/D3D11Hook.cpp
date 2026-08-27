@@ -34,6 +34,11 @@
 // when ENB's callback is not already driving them.
 extern void RunStandaloneFrameUpdate();
 
+// Standalone teardown latch (defined in main.cpp) — called on WM_DESTROY so
+// the bridge API reports invalid once the game window is gone, covering the
+// exit path where ENB's OnExit callback never fires.
+extern void NotifyStandaloneWindowDestroyed();
+
 #include <d3d11.h>
 #include <dxgi.h>
 
@@ -164,6 +169,9 @@ namespace D3D11Hook
                 SKSE::log::info("SkyrimBridge: GPU profiler {} (F11)",
                     prof.IsEnabled() ? "ENABLED" : "DISABLED");
             }
+        }
+        if (uMsg == WM_DESTROY) {
+            NotifyStandaloneWindowDestroyed();
         }
 
         return CallWindowProcA(s_originalWndProc, hWnd, uMsg, wParam, lParam);
