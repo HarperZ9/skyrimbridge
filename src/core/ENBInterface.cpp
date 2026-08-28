@@ -18,6 +18,13 @@ namespace ENBInterface
     static void* g_enbModule = nullptr;   // saved for diagnostics
     static PushStats g_pushStats{};
 
+    // Push state, namespace-scope so InvalidateDirtyCache() and
+    // PushAvailabilityZero() can reach it alongside PushAllData().
+    static bool        g_firstPush = true;
+    static std::size_t g_pushCount = 0;
+    static SB::AllData g_prevData{};
+    static bool        g_hasPrevData = false;
+
     const PushStats& GetPushStats()
     {
         return g_pushStats;
@@ -130,15 +137,8 @@ namespace ENBInterface
         if (!SetParameter)
             return;
 
-        static bool s_firstPush = true;
-        static std::size_t s_pushCount = 0;
-
-        // Dirty tracking: store previous frame's data, only push changed params
-        static SB::AllData s_prevData{};
-        static bool s_hasPrevData = false;
-
         const auto* rawData = reinterpret_cast<const char*>(&a_data);
-        const auto* prevRaw = reinterpret_cast<const char*>(&s_prevData);
+        const auto* prevRaw = reinterpret_cast<const char*>(&g_prevData);
 
         // Reusable ENBParameter struct — all SB params are float4 (COLOR4, 16 bytes)
         ENBParameter param;
@@ -153,7 +153,7 @@ namespace ENBInterface
             const auto& entry = SB::kParamTable[i];
 
             // Skip unchanged parameters (after first frame)
-            if (s_hasPrevData && std::memcmp(rawData + entry.offset, prevRaw + entry.offset, 16) == 0)
+            if (g_hasPrevData && std::memcmp(rawData + entry.offset, prevRaw + entry.offset, 16) == 0)
                 continue;
 
             ++dirtyCount;
@@ -161,43 +161,66 @@ namespace ENBInterface
 
             for (const auto* shader : SB::kTargetShaders) {
                 int result = SetParameter(nullptr, shader, entry.name, &param);
-                if (s_firstPush) {
+                if (g_firstPush) {
                     if (result) ++totalSuccess; else ++totalFail;
                 }
             }
         }
 
-        if (s_firstPush) {
+        if (g_firstPush) {
             SKSE::log::info("SkyrimBridge: first push — {}/{} succeeded ({} dirty params x {} shaders)",
                 totalSuccess, dirtyCount * std::size(SB::kTargetShaders),
                 dirtyCount, std::size(SB::kTargetShaders));
             if (totalFail > 0) {
                 SKSE::log::warn("SkyrimBridge: first push — {} SetParameter calls failed", totalFail);
             }
-            s_firstPush = false;
+            g_firstPush = false;
         }
 
         // Store current frame for next-frame comparison
-        s_prevData = a_data;
-        s_hasPrevData = true;
-        ++s_pushCount;
+        g_prevData = a_data;
+        g_hasPrevData = true;
+        ++g_pushCount;
 
         // Update push stats for debug GUI
         g_pushStats.dirtyParams     = dirtyCount;
         g_pushStats.totalParams     = static_cast<int>(SB::kParamCount);
         g_pushStats.setParamCalls   = dirtyCount * static_cast<int>(std::size(SB::kTargetShaders));
-        g_pushStats.pushCount       = s_pushCount;
-        g_pushStats.firstPushDone   = !s_firstPush || s_pushCount > 0;
-        if (s_pushCount == 1) {
+        g_pushStats.pushCount       = g_pushCount;
+        g_pushStats.firstPushDone   = !g_firstPush || g_pushCount > 0;
+        if (g_pushCount == 1) {
             g_pushStats.setParamSuccess = totalSuccess;
             g_pushStats.setParamFail    = totalFail;
         }
 
         // Periodic dirty-ratio log (sparse: only at milestones)
-        if (s_pushCount == 300 || s_pushCount == 3000) {
+        if (g_pushCount == 300 || g_pushCount == 3000) {
             SKSE::log::info("SkyrimBridge: push #{} — {}/{} params dirty",
-                s_pushCount, dirtyCount, SB::kParamCount);
+                g_pushCount, dirtyCount, SB::kParamCount);
         }
+    }
+
+    void InvalidateDirtyCache()
+    {
+        g_hasPrevData = false;
+    }
+
+    void PushAvailabilityZero()
+    {
+        if (!SetParameter)
+            return;
+
+        ENBParameter param;   // ctor zeroes Data
+        param.Size = 16;
+        param.Type = ENBParameterType::ENBParam_COLOR4;
+
+        for (const auto* shader : SB::kTargetShaders) {
+            SetParameter(nullptr, shader, "SB_Render_Frame", &param);
+        }
+
+        // The live heartbeat must come back on the very next frame even
+        // though the cached copy still holds the pre-save value.
+        InvalidateDirtyCache();
     }
 
     bool ReloadConfig()

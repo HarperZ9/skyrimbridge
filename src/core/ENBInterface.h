@@ -145,4 +145,18 @@ namespace ENBInterface
     // Pushes every parameter in kParamTable to every shader in
     // kTargetShaders, with per-frame dirty tracking.
     void PushAllData(const SB::AllData& a_data);
+
+    // Drop the dirty-tracking cache so the next PushAllData() pushes every
+    // parameter. Required after PostLoad/PostReset: ENB rebuilds its
+    // parameter set from disk defaults while the cache still claims the
+    // values are unchanged, which would suppress the re-push and leave the
+    // shaders on stale data.
+    void InvalidateDirtyCache();
+
+    // Zero the availability heartbeat (SB_Render_Frame) in every target
+    // shader. Called on PreSave: ENB persists current parameter values to
+    // its INI, and a saved non-zero heartbeat would be replayed on the next
+    // session start, faking bridge availability before the first real push.
+    // Also invalidates the dirty cache so the live value returns next frame.
+    void PushAvailabilityZero();
 }

@@ -7,7 +7,9 @@
 //
 //  NAMING: SB_ prefix avoids collision with ENB/game parameters.
 //  PACKING: One float4 per semantic group.
-//  Total: 122 float4 params across 22 domains.
+//  The authoritative param count is kParamCount (BridgeData.cpp); the
+//  first-push log line reports it live. 136 float4s across 25 domains
+//  as of the DerivedData addition.
 //=============================================================================
 
 #include <cstdint>
@@ -337,6 +339,21 @@ namespace SB
         Float4 Config;          // .x = theme index (0-7), .yzw = reserved
     };
 
+    // ── 25. DERIVED — CPU-computed screen-space projections ────────────
+    // Restores the SB_*_NDC contract that shaders/SkyrimBridge.fxh has
+    // documented since v2: single-pass ENB stages (sun sprite, lens) have
+    // no place to share a per-frame VP projection, so deriving NDC per
+    // pixel is wasteful there. Computed once per frame from CameraData by
+    // ComputeDerivedData(), before sanitize. Sits at the end of AllData so
+    // every pre-existing field keeps its shared-memory offset.
+
+    struct DerivedData
+    {
+        Float4 SunNDC;          // .xy = NDC [-1,1], .z = onScreen (0/1), .w = elevation (rad)
+        Float4 MasserNDC;       // .xy = NDC [-1,1], .z = onScreen (0/1), .w = phase brightness [0,1]
+        Float4 SecundaNDC;      // .xy = NDC [-1,1], .z = onScreen (0/1), .w = phase brightness [0,1]
+    };
+
     // ── Aggregate ───────────────────────────────────────────────────────
 
     struct AllData
@@ -365,7 +382,15 @@ namespace SB
         PerfData        perf;
         SceneData       scene;
         ThemeData       theme;
+        DerivedData     derived;
     };
+
+    // Projects the celestial directions through the camera basis into the
+    // SB_*_NDC parameters, mirroring SB_GetViewMatrix/SB_GetProjMatrix in
+    // shaders/SkyrimBridge_CB.fxh (row-vector view rows, FOV in radians).
+    // Call once per frame after the trackers fill CameraData/CelestialData
+    // and before SanitizeAllData().
+    void ComputeDerivedData(AllData& a_data);
 
     // ── Parameter name table ────────────────────────────────────────────
     // Maps each Float4 field to the ENB parameter name string.

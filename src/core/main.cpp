@@ -25,6 +25,7 @@
 
 #include "BridgeData.h"
 #include "ENBInterface.h"
+#include "ENBGuiIntegration.h"
 #include "CompatDetect.h"
 #include "PapyrusBridge.h"
 #include "WriteBackProcessor.h"
@@ -320,6 +321,10 @@ static void DoFrameUpdate()
         SKSE::log::error("SkyrimBridge: WriteBackProcessor threw");
     }
 
+    // Screen-space projections (SB_*_NDC) from the camera basis; before
+    // sanitize so non-finite results are scrubbed with everything else.
+    SB::ComputeDerivedData(data);
+
     SanitizeAllData(data);
 
     // GPU tier: rebuild scene matrices for compute consumers, refresh the
@@ -332,8 +337,10 @@ static void DoFrameUpdate()
         SB::AtmosphereRenderer::Get().UpdateLUTs(sunZenithCos, sunAzimuth);
     }
 
-    // 1. ENB shader parameters (dirty-tracked push of the whole table)
+    // 1. ENB shader parameters (dirty-tracked push of the whole table),
+    // then the editor bar's live snapshot (reads the push stats).
     ENBInterface::PushAllData(data);
+    ENBGuiIntegration::Update(data);
     SB::Api::MarkFramePublished(data);
 
     // 2. Phase 2: weather parameter computation and push
@@ -465,7 +472,30 @@ static void __stdcall OnENBCallback(int a_callbackType)
         RunFrameUpdate();
         break;
 
+    case ENBInterface::CallbackType::PreSave:
+        // ENB is about to persist parameter values to its INI. A saved
+        // non-zero heartbeat would be replayed at the next session start
+        // and fake bridge availability, so zero it for the save window.
+        ENBInterface::PushAvailabilityZero();
+        break;
+
+    case ENBInterface::CallbackType::PostLoad:
+    case ENBInterface::CallbackType::PostReset:
+        // ENB rebuilt its parameters (config load / device reset) while
+        // the dirty cache still claims our values are current — force a
+        // full re-push next frame.
+        ENBInterface::InvalidateDirtyCache();
+        if (static_cast<ENBInterface::CallbackType>(a_callbackType) ==
+            ENBInterface::CallbackType::PostReset)
+            ENBGuiIntegration::OnPostReset();
+        break;
+
+    case ENBInterface::CallbackType::PreReset:
+        ENBGuiIntegration::OnPreReset();
+        break;
+
     case ENBInterface::CallbackType::OnExit:
+        ENBGuiIntegration::Shutdown();
         SB::Api::MarkTeardown();
         SB::ParmLinkCompat::Get().Shutdown();
         SB::SharedMemoryBridge::Get().Shutdown();
@@ -519,6 +549,8 @@ static void OnMessage(SKSE::MessagingInterface::Message* a_msg)
             ENBInterface::SetCallbackFunction(OnENBCallback);
             s_enbDrivesUpdates.store(true, std::memory_order_relaxed);
             SKSE::log::info("SkyrimBridge: ENB callback registered (ENB drives updates)");
+            // Live editor bar (AntTweakBar exports from the same module).
+            ENBGuiIntegration::Init();
         } else {
             SKSE::log::info("SkyrimBridge: ENBSeries not detected; the present "
                 "hook drives updates and parameters publish to shared memory");

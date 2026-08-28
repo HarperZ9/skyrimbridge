@@ -1,4 +1,5 @@
 #include "BridgeData.h"
+#include <cmath>
 #include <cstddef>
 
 //=============================================================================
@@ -18,7 +19,12 @@ namespace SB
 {
     const ParamEntry kParamTable[] = {
         // ── Celestial ───────────────────────────────────────────────────
-        // NDC params removed — derivable from direction + VP in shader
+        // NDC params live in DerivedData (end of AllData) so single-pass
+        // stages get screen positions without per-pixel VP math; the table
+        // groups them here because push order is name-keyed, not offset-keyed.
+        ENTRY(derived.SunNDC,               "SB_Sun_NDC"),
+        ENTRY(derived.MasserNDC,            "SB_Masser_NDC"),
+        ENTRY(derived.SecundaNDC,           "SB_Secunda_NDC"),
         ENTRY(celestial.SunDirection,       "SB_Sun_Direction"),
         ENTRY(celestial.SunColor,           "SB_Sun_Color"),
         ENTRY(celestial.MasserDirection,    "SB_Masser_Direction"),
@@ -204,6 +210,55 @@ namespace SB
     };
 
     const std::size_t kParamCount = sizeof(kParamTable) / sizeof(kParamTable[0]);
+
+    // ── Derived screen-space projections ────────────────────────────────
+    // Mirrors the shader-side convention in shaders/SkyrimBridge_CB.fxh:
+    // view rows are right/up/forward, FOV is radians, aspect is w/h, and
+    // a projected direction lands at ndc = (vx/(vz*a*t), vy/(vz*t)) with
+    // t = tan(fov/2). Translation cancels for pure directions.
+
+    static Float4 ProjectDirection(const AllData& a_data, const Float4& a_dir, float a_passThroughW)
+    {
+        Float4 ndc{ 0.f, 0.f, 0.f, a_passThroughW };
+
+        const float fov    = a_data.camera.Params.x;
+        const float aspect = a_data.camera.Params.w;
+        if (!(fov > 0.f) || !(aspect > 0.f))
+            return ndc;
+
+        const float t = std::tan(fov * 0.5f);
+        if (!(t > 0.f))
+            return ndc;
+
+        const Float4& r = a_data.camera.ViewRow0;
+        const Float4& u = a_data.camera.ViewRow1;
+        const Float4& f = a_data.camera.ViewRow2;
+
+        const float vx = r.x * a_dir.x + r.y * a_dir.y + r.z * a_dir.z;
+        const float vy = u.x * a_dir.x + u.y * a_dir.y + u.z * a_dir.z;
+        const float vz = f.x * a_dir.x + f.y * a_dir.y + f.z * a_dir.z;
+
+        if (vz <= 1e-4f)   // behind or grazing the camera plane
+            return ndc;
+
+        ndc.x = vx / (vz * aspect * t);
+        ndc.y = vy / (vz * t);
+
+        // .xy stays valid slightly past the frame edge so consumers can
+        // fade instead of pop; .z is the strict on-screen gate.
+        const bool onScreen = std::isfinite(ndc.x) && std::isfinite(ndc.y) &&
+                              std::fabs(ndc.x) <= 1.05f && std::fabs(ndc.y) <= 1.05f;
+        ndc.z = onScreen ? 1.f : 0.f;
+        return ndc;
+    }
+
+    void ComputeDerivedData(AllData& a_data)
+    {
+        auto& c = a_data.celestial;
+        a_data.derived.SunNDC     = ProjectDirection(a_data, c.SunDirection,     c.SunDirection.w);
+        a_data.derived.MasserNDC  = ProjectDirection(a_data, c.MasserDirection,  c.MasserDirection.w);
+        a_data.derived.SecundaNDC = ProjectDirection(a_data, c.SecundaDirection, c.SecundaDirection.w);
+    }
 }
 
 #undef ENTRY

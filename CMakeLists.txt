@@ -57,6 +57,7 @@ add_commonlibsse_plugin(
         src/core/BridgeApi.cpp
         src/core/BridgeData.cpp
         src/core/ENBInterface.cpp
+        src/core/ENBGuiIntegration.cpp
         src/core/CompatDetect.cpp
         src/core/PapyrusBridge.cpp
         src/core/WriteBackProcessor.cpp

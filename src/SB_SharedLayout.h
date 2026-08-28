@@ -72,7 +72,9 @@ namespace SB
 
     // Constants
     static constexpr uint32_t kSharedMemMagic    = 0x53423031;  // 'SB01'
-    static constexpr uint32_t kSharedMemVersion   = 1;
+    // v2: AllData grew DerivedData (SB_*_NDC) at the end. Prior offsets
+    // are unchanged, but structSize differs, so v1 readers must re-pin.
+    static constexpr uint32_t kSharedMemVersion   = 2;
     static constexpr const wchar_t* kSharedMemName = L"SkyrimBridge_GameState";
     static constexpr const wchar_t* kEventName     = L"SkyrimBridge_DataReady";
 
