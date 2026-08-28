@@ -331,9 +331,11 @@ static void DoFrameUpdate()
     // atmosphere LUTs when the sun has moved.
     SB::SceneMatrices::Get().Update(data);
     if (SB::AtmosphereRenderer::Get().IsInitialized()) {
-        float sunZenithCos = data.celestial.SunDirection.y;
+        // Skyrim world space is Z-up: vertical component is .z, azimuth
+        // sweeps from +Y (north) toward +X (east).
+        float sunZenithCos = data.celestial.SunDirection.z;
         float sunAzimuth = std::atan2(data.celestial.SunDirection.x,
-                                      data.celestial.SunDirection.z);
+                                      data.celestial.SunDirection.y);
         SB::AtmosphereRenderer::Get().UpdateLUTs(sunZenithCos, sunAzimuth);
     }
 

@@ -77,16 +77,40 @@ namespace SB::CelestialTracker
         if (!sky)
             return data;
 
+        // ── Camera origin ───────────────────────────────────────────────
+        // Sky objects ride a dome centered on the camera, so a node's raw
+        // world.translate is dominated by the camera's absolute position;
+        // normalizing it collapses to a near-horizontal constant. The
+        // usable direction is the camera-relative offset, normalized.
+        // Same camera source as CameraTracker, so these directions share
+        // a reference frame with the view rows that project them to NDC.
+        RE::NiPoint3 camPos{};
+        bool hasCam = false;
+        if (auto* niCam = RE::Main::WorldRootCamera()) {
+            camPos = niCam->world.translate;
+            hasCam = true;
+        }
+
+        auto setDirection = [&](Float4& a_out, const RE::NiPoint3& a_pos) -> bool {
+            if (!hasCam)
+                return false;
+            const float dx = a_pos.x - camPos.x;
+            const float dy = a_pos.y - camPos.y;
+            const float dz = a_pos.z - camPos.z;
+            const float len = std::sqrt(dx * dx + dy * dy + dz * dz);
+            if (len <= 1e-3f)
+                return false;
+            a_out.x = dx / len;
+            a_out.y = dy / len;
+            a_out.z = dz / len;
+            return true;
+        };
+
         // ── Sun ─────────────────────────────────────────────────────────
         // Only direction needed — NDC derivable in shader from dir + VP
         RE::NiPoint3 sunPos{};
-        if (sky->sun && GetSkyObjectPos(sky->sun, sunPos)) {
-            float len = std::sqrt(sunPos.x*sunPos.x + sunPos.y*sunPos.y + sunPos.z*sunPos.z);
-            if (len > 1e-6f) {
-                data.SunDirection.x = sunPos.x / len;
-                data.SunDirection.y = sunPos.y / len;
-                data.SunDirection.z = sunPos.z / len;
-            }
+        if (sky->sun && GetSkyObjectPos(sky->sun, sunPos)
+            && setDirection(data.SunDirection, sunPos)) {
             // Elevation angle (rad) — angle above horizon
             data.SunDirection.w = std::asin(std::clamp(data.SunDirection.z, -1.0f, 1.0f));
         }
@@ -99,25 +123,15 @@ namespace SB::CelestialTracker
         // ── Masser ──────────────────────────────────────────────────────
         // Direction only — phase brightness packed into .w
         RE::NiPoint3 masserPos{};
-        if (sky->masser && GetSkyObjectPos(sky->masser, masserPos)) {
-            float len = std::sqrt(masserPos.x*masserPos.x + masserPos.y*masserPos.y + masserPos.z*masserPos.z);
-            if (len > 1e-6f) {
-                data.MasserDirection.x = masserPos.x / len;
-                data.MasserDirection.y = masserPos.y / len;
-                data.MasserDirection.z = masserPos.z / len;
-            }
+        if (sky->masser && GetSkyObjectPos(sky->masser, masserPos)
+            && setDirection(data.MasserDirection, masserPos)) {
             data.MasserDirection.w = PhaseBrightness(true);
         }
 
         // ── Secunda ─────────────────────────────────────────────────────
         RE::NiPoint3 secundaPos{};
-        if (sky->secunda && GetSkyObjectPos(sky->secunda, secundaPos)) {
-            float len = std::sqrt(secundaPos.x*secundaPos.x + secundaPos.y*secundaPos.y + secundaPos.z*secundaPos.z);
-            if (len > 1e-6f) {
-                data.SecundaDirection.x = secundaPos.x / len;
-                data.SecundaDirection.y = secundaPos.y / len;
-                data.SecundaDirection.z = secundaPos.z / len;
-            }
+        if (sky->secunda && GetSkyObjectPos(sky->secunda, secundaPos)
+            && setDirection(data.SecundaDirection, secundaPos)) {
             data.SecundaDirection.w = PhaseBrightness(false);
         }
 
