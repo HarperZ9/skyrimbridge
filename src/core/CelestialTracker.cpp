@@ -68,6 +68,7 @@ namespace SB::CelestialTracker
         return true;
     }
 
+
     // ── Main update ─────────────────────────────────────────────────────
     CelestialData Update()
     {
@@ -76,6 +77,32 @@ namespace SB::CelestialTracker
         auto* sky = RE::Sky::GetSingleton();
         if (!sky)
             return data;
+
+        // ── Time ────────────────────────────────────────────────────────
+        // Computed before the celestial blocks: the sun publish below is
+        // gated on the day window.
+        auto* calendar = RE::Calendar::GetSingleton();
+        if (calendar) {
+            float hour = calendar->GetHour();
+            data.TimeData.x = hour;
+            data.TimeData.w = hour / 24.0f;  // day progress [0,1]
+        }
+
+        // Sunrise/sunset from climate
+        float sunriseBegin = 6.0f, sunriseEnd = 8.0f;
+        float sunsetBegin = 17.0f, sunsetEnd = 19.5f;
+
+        if (sky->currentClimate) {
+            auto* climate = sky->currentClimate;
+            auto& timing = climate->timing;
+            // uint8_t values: 10-minute intervals (0-143). hour = value / 6.0
+            sunriseBegin = static_cast<float>(timing.sunrise.begin) / 6.0f;
+            sunriseEnd   = static_cast<float>(timing.sunrise.end)   / 6.0f;
+            sunsetBegin  = static_cast<float>(timing.sunset.begin)  / 6.0f;
+            sunsetEnd    = static_cast<float>(timing.sunset.end)    / 6.0f;
+            data.TimeData.y = sunriseBegin;
+            data.TimeData.z = sunsetEnd;
+        }
 
         // ── Camera origin ───────────────────────────────────────────────
         // Sky objects ride a dome centered on the camera, so a node's raw
@@ -107,9 +134,16 @@ namespace SB::CelestialTracker
         };
 
         // ── Sun ─────────────────────────────────────────────────────────
-        // Only direction needed — NDC derivable in shader from dir + VP
+        // Only direction needed — NDC derivable in shader from dir + VP.
+        // Gated to the day window (±1h fringe, same span the dawn/dusk
+        // segments use): the sun node keeps a live transform after the
+        // disc fades out at night without being app-culled, so an
+        // ungated read publishes a stale, above-horizon direction at
+        // midnight. Outside the window the direction stays zeroed.
+        const bool sunWindow = data.TimeData.x > (sunriseBegin - 1.0f)
+                            && data.TimeData.x < (sunsetEnd + 1.0f);
         RE::NiPoint3 sunPos{};
-        if (sky->sun && GetSkyObjectPos(sky->sun, sunPos)
+        if (sunWindow && sky->sun && GetSkyObjectPos(sky->sun, sunPos)
             && setDirection(data.SunDirection, sunPos)) {
             // Elevation angle (rad) — angle above horizon
             data.SunDirection.w = std::asin(std::clamp(data.SunDirection.z, -1.0f, 1.0f));
@@ -120,43 +154,39 @@ namespace SB::CelestialTracker
             data.SunColor.w = sky->currentWeather->data.sunGlare;
         }
 
-        // ── Masser ──────────────────────────────────────────────────────
+        // ── Moons ───────────────────────────────────────────────────────
+        // A Moon's orbit is a rotation of moonNode at the sky center;
+        // zOffset pushes the disc mesh out along the node axis. The
+        // node's own translation (and the inherited SkyObject::root)
+        // can therefore sit at the center with a zero-length camera
+        // offset. The mesh carries the resolved disc position, so try
+        // it first and fall back through the containers; every
+        // candidate still passes the null, app-cull, and offset-length
+        // gates.
+        auto moonDirection = [&](const RE::Moon* a_moon, Float4& a_out) -> bool {
+            if (!a_moon)
+                return false;
+            const RE::NiAVObject* candidates[] = {
+                a_moon->moonMesh.get(),
+                a_moon->moonNode.get(),
+                a_moon->root.get(),
+            };
+            for (const auto* node : candidates) {
+                if (!node || node->GetAppCulled())
+                    continue;
+                if (setDirection(a_out, node->world.translate))
+                    return true;
+            }
+            return false;
+        };
+
         // Direction only — phase brightness packed into .w
-        RE::NiPoint3 masserPos{};
-        if (sky->masser && GetSkyObjectPos(sky->masser, masserPos)
-            && setDirection(data.MasserDirection, masserPos)) {
+        if (moonDirection(sky->masser, data.MasserDirection)) {
             data.MasserDirection.w = PhaseBrightness(true);
         }
 
-        // ── Secunda ─────────────────────────────────────────────────────
-        RE::NiPoint3 secundaPos{};
-        if (sky->secunda && GetSkyObjectPos(sky->secunda, secundaPos)
-            && setDirection(data.SecundaDirection, secundaPos)) {
+        if (moonDirection(sky->secunda, data.SecundaDirection)) {
             data.SecundaDirection.w = PhaseBrightness(false);
-        }
-
-        // ── Time ────────────────────────────────────────────────────────
-        auto* calendar = RE::Calendar::GetSingleton();
-        if (calendar) {
-            float hour = calendar->GetHour();
-            data.TimeData.x = hour;
-            data.TimeData.w = hour / 24.0f;  // day progress [0,1]
-        }
-
-        // Sunrise/sunset from climate
-        float sunriseBegin = 6.0f, sunriseEnd = 8.0f;
-        float sunsetBegin = 17.0f, sunsetEnd = 19.5f;
-
-        if (sky->currentClimate) {
-            auto* climate = sky->currentClimate;
-            auto& timing = climate->timing;
-            // uint8_t values: 10-minute intervals (0-143). hour = value / 6.0
-            sunriseBegin = static_cast<float>(timing.sunrise.begin) / 6.0f;
-            sunriseEnd   = static_cast<float>(timing.sunrise.end)   / 6.0f;
-            sunsetBegin  = static_cast<float>(timing.sunset.begin)  / 6.0f;
-            sunsetEnd    = static_cast<float>(timing.sunset.end)    / 6.0f;
-            data.TimeData.y = sunriseBegin;
-            data.TimeData.z = sunsetEnd;
         }
 
         // ── Time-of-day segments ─────────────────────────────────────────
