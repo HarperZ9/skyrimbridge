@@ -269,4 +269,24 @@ if(BUILD_TESTING)
             WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
             TIMEOUT 600
     )
+
+    add_test(
+        NAME SkyrimBridge.RepoFacts
+        COMMAND
+            "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/check_repo_facts.py"
+    )
+    add_test(
+        NAME SkyrimBridge.RepoArt
+        COMMAND
+            "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/check_repo_art.py"
+    )
+    set_tests_properties(
+        SkyrimBridge.RepoFacts
+        SkyrimBridge.RepoArt
+        PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            LABELS "documentation;artwork"
+    )
 endif()

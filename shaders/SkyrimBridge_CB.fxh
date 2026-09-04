@@ -20,7 +20,7 @@
 #define SKYRIMBRIDGE_FXH 1
 
 //-----------------------------------------------------------------------------
-//  Parameter declarations — 134 float4s delivered via ENBSetParameter
+//  Parameter declarations — 133 float4s delivered via ENBSetParameter
 //
 //  Each variable has a UIName annotation matching the C++ kParamTable name.
 //  ENB resolves SetParameter(nullptr, "ENBBLOOM.FX", "SB_Sun_Direction", &param)
@@ -159,7 +159,7 @@ float4 SB_UI_Menus            < string UIName = "SB_UI_Menus";            string
 float4 SB_UI_HUD              < string UIName = "SB_UI_HUD";              string UIWidget = "Color"; int UIHidden = 1; >; // .x = isHUDVisible(0/1), .y = isCrosshairVisible(0/1), .z = isInCinematicMode(0/1), .w = isLoading(0/1)
 float4 SB_UI_Detail           < string UIName = "SB_UI_Detail";           string UIWidget = "Color"; int UIHidden = 1; >; // .x = isInCrafting(0/1), .y = isInBook(0/1), .z = isInLockpick(0/1), .w = isInConsole(0/1)
 
-// ---- 18. Computed Feedback (6 float4s) ----
+// ---- 18. Computed Feedback (8 float4s) ----
 // GPU read-back from previous frame (1-frame delay)
 float4 SB_Computed_Luminance  < string UIName = "SB_Computed_Luminance";  string UIWidget = "Color"; int UIHidden = 1; >; // .x = smoothed center lum, .y = instant center lum, .z = center R, .w = center G
 float4 SB_Computed_Scene      < string UIName = "SB_Computed_Scene";      string UIWidget = "Color"; int UIHidden = 1; >; // .x = center B, .y = sceneAvgLum(smoothed), .z = lumRange(max-min), .w = feedbackValid(0/1)
@@ -190,7 +190,7 @@ float4 SB_NPC_Threat          < string UIName = "SB_NPC_Threat";          string
 float4 SB_Perf_Timing         < string UIName = "SB_Perf_Timing";         string UIWidget = "Color"; int UIHidden = 1; >; // .x = gpuFrameMs, .y = cpuFrameMs, .z = presentLatencyMs, .w = targetFps
 float4 SB_Perf_Budget         < string UIName = "SB_Perf_Budget";         string UIWidget = "Color"; int UIHidden = 1; >; // .x = gpuBudgetPct [0,1], .y = qualityScale [0,1], .z = thermalState, .w = frameDropCount
 
-// ---- 23. Scene Composition (5 float4s) ----
+// ---- 23. Scene Composition (21 float4s) ----
 // Material counts from BSShader::BeginTechnique hook (1-frame delay, fractions of total lighting draws)
 float4 SB_Scene_MatCount1     < string UIName = "SB_Scene_MatCount1";     string UIWidget = "Color"; int UIHidden = 1; >; // .x = general%, .y = skin%, .z = terrain%, .w = vegetation%
 float4 SB_Scene_MatCount2     < string UIName = "SB_Scene_MatCount2";     string UIWidget = "Color"; int UIHidden = 1; >; // .x = hair%, .y = eye%, .z = snow%, .w = emissive%
