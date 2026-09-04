@@ -1,0 +1,89 @@
+{
+  "header": {
+    "name": "skyrimbridge",
+    "role": "an SKSE plugin that publishes live Skyrim state to ENB shaders",
+    "tagline": "Publish the state a shader asks for, by name.",
+    "words": ["collect", "publish", "reflect", "verify", "refuse"]
+  },
+  "flows": [
+    {
+      "file": "state-to-shader.svg",
+      "kicker": "a shader cannot ask the game a question, so the plugin has to answer before it is asked",
+      "title": "How live game state reaches a shader parameter, or does not",
+      "footnote": "The published set is declared twice, once as a C++ table of names and offsets and once as annotated float4 declarations in the shader header. Both sides hold 133 names and the two sets are identical, and neither file can see the other, so a one-sided edit shows up as a failing test rather than as a parameter that silently reads zero.",
+      "alt": "Eight stages carrying live game state into a shader parameter: frame tick, trackers, one struct, dirty compare, name table, ENB push, shader header, shader read. Per-domain trackers collect twenty-four domains of state, covering celestial position, atmosphere, fog, weather, the player, the camera, interiors, shadow, effects, render state, image space, nearby lights, actor values, the crosshair, equipment, quests, UI state, computed feedback, region and location, audio and music, NPC detection, performance and GPU timing, scene composition, and theme. Everything lands in one flat struct of 133 float4 slots. Each slot is compared against the previous frame sixteen bytes at a time, and an unchanged slot is skipped rather than resent. A surviving slot is looked up in a table that pairs a published name with a byte offset into the struct, then written through ENBSetParameter once for each of the nine ENB stage shaders: sun sprite, effect prepass, effect, effect postpass, lens, underwater, depth of field, bloom and adaptation. The shader header declares the same 133 names as annotated float4 values, all hidden from the ENB editor, and a shader reads one by name. Three outcomes: a slot published to every target shader, a slot skipped because its bytes did not change, and no write at all when ENBSetParameter was never resolved.",
+      "stages": [
+        { "title": "Frame tick", "note": "The render hook, once a frame." },
+        { "title": "Trackers", "note": "Twenty-four domains collected." },
+        { "title": "One struct", "note": "133 float4 slots, flat." },
+        { "title": "Dirty compare", "note": "Sixteen bytes, or nothing goes." },
+        { "title": "Name table", "note": "A name and an offset per slot." },
+        { "title": "ENB push", "note": "Nine shaders, one call each." },
+        { "title": "Shader header", "note": "The same 133 names, declared." },
+        { "title": "Shader read", "note": "By name, or the effect goes without." }
+      ],
+      "returns": [
+        { "from": 3, "to": 0, "label": "UNCHANGED BYTES ARE NEVER RESENT" },
+        { "from": 6, "to": 4, "label": "A NAME ON ONE SIDE FAILS A TEST" }
+      ],
+      "outcomes": [
+        { "label": "PUBLISHED", "note": "written to every target shader", "tone": "verified" },
+        { "label": "SKIPPED", "note": "the slot did not change", "tone": "drift" },
+        { "label": "NO WRITE", "note": "ENB was never resolved", "tone": "none" }
+      ]
+    },
+    {
+      "file": "verb-to-record.svg",
+      "kicker": "reading a record is cheap, and writing one is the part that has to be reversible",
+      "title": "How a command reaches an engine record, or is refused",
+      "footnote": "Verify and strict verify are different operations on purpose. Verify reads the record, renders it to text, parses that text back and compares, without ever writing to the engine. Strict verify writes the parsed value back and reads a third time, which proves the setter but changes live state, so the two are separate verbs rather than one verb with a flag.",
+      "alt": "Eight stages taking a command to an engine record: client write, request sequence, dispatch, schema, field, read or write, verify, response. A client writes a verb, an integer argument and two string arguments into a shared memory block of 5,184 bytes, with the verb at offset 32 and the two string arguments at offsets 64 and 576. The request sequence number is bumped last, after the payload is in place, so a reader never sees half a request. Dispatch matches one of nineteen verbs and refuses anything else: ping, six reflection verbs, four texture verbs, three model verbs, two region verbs, and one each for game status, travel, script report and cell report. Reflection resolves a named schema out of fourteen registered record types, covering image space, volumetric lighting, lighting templates, weather, climate, regions, lights, water, effect shaders, image space modifiers, worldspaces, grass, land textures and trees. Those schemas carry 827 named fields in total, in seven value kinds: float, integer, boolean, three-channel colour, four-channel colour, form link and string. Weather alone accounts for 487 of them, because seventeen colour types across four times of day, thirty-two cloud layers and a full directional ambient cube are all exposed individually. Verify reads the record, writes it to text, parses it back and compares, without touching the engine. Strict verify writes the value back and reads a third time, which mutates live state and is a separate verb for that reason. The response carries a status code and up to 4,096 bytes of text, and the response sequence number is written last. Three outcomes: a field applied and read back, a field verified without any write, and a refusal for an unknown verb or schema.",
+      "stages": [
+        { "title": "Client write", "note": "A verb and two arguments." },
+        { "title": "Request seq", "note": "Bumped last, after the payload." },
+        { "title": "Dispatch", "note": "Nineteen verbs, and nothing else." },
+        { "title": "Schema", "note": "Fourteen record types, by name." },
+        { "title": "Field", "note": "827 named, in seven kinds." },
+        { "title": "Read or write", "note": "Typed, one field at a time." },
+        { "title": "Verify", "note": "Read, text, read. No write." },
+        { "title": "Response", "note": "Status, text, then the sequence." }
+      ],
+      "returns": [
+        { "from": 2, "to": 0, "label": "AN UNKNOWN VERB IS REFUSED" },
+        { "from": 6, "to": 4, "label": "STRICT VERIFY IS ITS OWN VERB" }
+      ],
+      "outcomes": [
+        { "label": "APPLIED", "note": "written, then read back", "tone": "verified" },
+        { "label": "VERIFY ONLY", "note": "read back without a write", "tone": "drift" },
+        { "label": "REFUSED", "note": "an unknown verb or schema", "tone": "none" }
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "file": "bridge-table.svg",
+      "kicker": "counts, not adjectives",
+      "title": "What the bridge declares, and where each number is read from",
+      "source": "shaders, src, include, tests and cmake, on this checkout",
+      "heads": ["the bridge declares", "how many", "where the number comes from"],
+      "alt": "A table of fourteen rows: what the bridge declares, how many of it there are, and where each number is read from. The plugin publishes 133 float4 parameters across twenty-four domains, and pushes each one to nine ENB stage shaders. The C++ name table and the shader header declare the same 133 names, and the two sets are identical. Engine reflection registers fourteen record types carrying 827 named fields, of which the weather record alone holds 487. There are twenty-one re-runnable validation harnesses in the tests directory, nine of which need an external mod corpus and are skipped without one. The command channel accepts nineteen verbs through a shared memory block of 5,184 bytes. The Papyrus surface registers forty-one script functions, and the plugin ABI is at version one. Four CTest targets are declared. No in-game acceptance result is recorded anywhere in the tree, so nothing here is evidence about how a frame looks on screen.",
+      "footnote": "Every count here was read from the header, the table, the harness or the CMake script that declares it rather than typed in, and tools/check_repo_facts.py reads those same files. The marked row is the honest null: this repository proves that the offline math, codecs and protocol layout hold, and it proves nothing about live rendering.",
+      "fields": [
+        { "key": "published parameters", "value": "133 float4s", "note": "The C++ name table in BridgeData.cpp and the shader header both declare 133, and the two name sets match exactly. Neither file can see the other, so a one-sided edit is a red test." },
+        { "key": "parameter domains", "value": "24 of them", "note": "Celestial through theme, each with its own header comment and its own count. The comment count and the declarations under it are compared, so a drifted header fails rather than misleads." },
+        { "key": "target shaders", "value": "nine of them", "note": "Sun sprite, effect prepass, effect, effect postpass, lens, underwater, depth of field, bloom and adaptation. Every changed parameter is written once per shader." },
+        { "key": "record schemas", "value": "fourteen", "note": "Image space, volumetric, lighting template, weather, climate, region, light, water, effect shader, image space modifier, worldspace, grass, land texture and tree." },
+        { "key": "named fields", "value": "827 in all", "note": "Counted by walking the field macros and literals in each schema and multiplying through the loops that generate them, rather than by trusting the table in the specification." },
+        { "key": "weather record", "value": "487 fields", "note": "Seventeen colour types across four times of day, thirty-two cloud layers with colour and alpha per time of day, a directional ambient cube, fog distances and the raw data bytes." },
+        { "key": "validation harnesses", "value": "21 in tests", "note": "Each one is a standalone script with its own exit code, and the runner refuses to start when its inventory of corpus tests names a file that is no longer there." },
+        { "key": "corpus harnesses", "value": "nine of them", "note": "Codec and mesh harnesses that need an external mod corpus. Portable mode skips them and runs the other twelve, so a fresh checkout still has something to prove." },
+        { "key": "command verbs", "value": "nineteen", "note": "Ping, reflection, texture, model, region, game status, travel, script report and cell report. Anything else is refused rather than guessed at." },
+        { "key": "command mailbox", "value": "5,184 bytes", "note": "A shared memory block with the verb at offset 32, the arguments at 64 and 576, and the result text at 1088. A harness pins every offset against the C++ static assertions." },
+        { "key": "papyrus functions", "value": "41 declared", "note": "Registered on the papyrus surface so a script can read published state by name, looked up against the same table the render path pushes from." },
+        { "key": "bridge abi version", "value": "one", "note": "kBridgeInterfaceVersion in the public header. A consumer that compiled against a different number is meant to refuse the interface rather than reinterpret it." },
+        { "key": "ctest targets", "value": "four declared", "note": "An inline comment parser, the portable harness run, and two that check this card and this artwork. The last two run under plain Python with no compiler and no graphics device." },
+        { "key": "in-game acceptance", "value": "none in the tree", "note": "The validation protocol states that every one of the six gated features ships off, and that live acceptance is a separate manual procedure nothing here carries out.", "tone": "drift" }
+      ]
+    }
+  ]
+}

@@ -1,5 +1,7 @@
 # SkyrimBridge
 
+<img src="docs/art/skyrimbridge-header.svg" alt="skyrimbridge, an SKSE plugin that publishes live Skyrim state to ENB shaders. Publish the state a shader asks for, by name.">
+
 An SKSE plugin that opens the Skyrim engine to shaders, tools, and creators.
 It publishes live game state to ENB every frame, edits engine records while
 the game runs, imports foreign texture and model files into formats the game
@@ -31,6 +33,8 @@ SkyrimBridge is several tools in one plugin. Use only the parts you need.
   can drive the engine in real time.
 - A GPU tier with a physically based atmosphere renderer and raymarched
   volumetric clouds, for setups that chain a D3D11 proxy.
+
+<img src="docs/art/state-to-shader.svg" alt="Eight stages carrying live game state into a shader parameter: frame tick, trackers, one struct, dirty compare, name table, ENB push, shader header, shader read. Per-domain trackers collect twenty-four domains of state, covering celestial position, atmosphere, fog, weather, the player, the camera, interiors, shadow, effects, render state, image space, nearby lights, actor values, the crosshair, equipment, quests, UI state, computed feedback, region and location, audio and music, NPC detection, performance and GPU timing, scene composition, and theme. Everything lands in one flat struct of 133 float4 slots. Each slot is compared against the previous frame sixteen bytes at a time, and an unchanged slot is skipped rather than resent. A surviving slot is looked up in a table that pairs a published name with a byte offset into the struct, then written through ENBSetParameter once for each of the nine ENB stage shaders: sun sprite, effect prepass, effect, effect postpass, lens, underwater, depth of field, bloom and adaptation. The shader header declares the same 133 names as annotated float4 values, all hidden from the ENB editor, and a shader reads one by name. Three outcomes: a slot published to every target shader, a slot skipped because its bytes did not change, and no write at all when ENBSetParameter was never resolved.">
 
 **For non-ENB shader and framework authors**
 - In-process consumers can resolve `SB_GetBridgeInterface` from
@@ -76,6 +80,8 @@ SkyrimBridge is several tools in one plugin. Use only the parts you need.
 - A command channel over shared memory lets an external tool drive the engine
   surface without the console. A command-line client, the Blender add-on, and
   a modlist smoke-tour tester all speak it.
+
+<img src="docs/art/verb-to-record.svg" alt="Eight stages taking a command to an engine record: client write, request sequence, dispatch, schema, field, read or write, verify, response. A client writes a verb, an integer argument and two string arguments into a shared memory block of 5,184 bytes, with the verb at offset 32 and the two string arguments at offsets 64 and 576. The request sequence number is bumped last, after the payload is in place, so a reader never sees half a request. Dispatch matches one of nineteen verbs and refuses anything else: ping, six reflection verbs, four texture verbs, three model verbs, two region verbs, and one each for game status, travel, script report and cell report. Reflection resolves a named schema out of fourteen registered record types, covering image space, volumetric lighting, lighting templates, weather, climate, regions, lights, water, effect shaders, image space modifiers, worldspaces, grass, land textures and trees. Those schemas carry 827 named fields in total, in seven value kinds: float, integer, boolean, three-channel colour, four-channel colour, form link and string. Weather alone accounts for 487 of them, because seventeen colour types across four times of day, thirty-two cloud layers and a full directional ambient cube are all exposed individually. Verify reads the record, writes it to text, parses it back and compares, without touching the engine. Strict verify writes the value back and reads a third time, which mutates live state and is a separate verb for that reason. The response carries a status code and up to 4,096 bytes of text, and the response sequence number is written last. Three outcomes: a field applied and read back, a field verified without any write, and a refusal for an unknown verb or schema.">
 
 ## Requirements
 
@@ -182,8 +188,10 @@ unless a private operator build explicitly configures it `ON`.
 
 ## Verification
 
+<img src="docs/art/bridge-table.svg" alt="A table of fourteen rows: what the bridge declares, how many of it there are, and where each number is read from. The plugin publishes 133 float4 parameters across twenty-four domains, and pushes each one to nine ENB stage shaders. The C++ name table and the shader header declare the same 133 names, and the two sets are identical. Engine reflection registers fourteen record types carrying 827 named fields, of which the weather record alone holds 487. There are twenty-one re-runnable validation harnesses in the tests directory, nine of which need an external mod corpus and are skipped without one. The command channel accepts nineteen verbs through a shared memory block of 5,184 bytes. The Papyrus surface registers forty-one script functions, and the plugin ABI is at version one. Four CTest targets are declared. No in-game acceptance result is recorded anywhere in the tree, so nothing here is evidence about how a frame looks on screen.">
+
 The file-format and codec work is validated offline against real game assets,
-with 17 re-runnable harnesses in `tests/`. Each checks its output against an
+with 21 re-runnable harnesses in `tests/`. Each checks its output against an
 independent decoder or against the game's own files. The features that write
 to the running engine are validated in-game; the acceptance steps are in
 [docs/VALIDATION-PROTOCOL.md](docs/VALIDATION-PROTOCOL.md).
