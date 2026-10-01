@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Nexus media: the runic typeface is renamed from Zentropy Runic to Zain Runic
+  (`media/nexus/zain-runic.ttf`, name table family `Zain Mint 137`, version
+  1.001). Glyphs and metrics are unchanged. The old `zentropy-runic.ttf` and
+  `zentropy-runic-specimen.png` URLs stay as copies so external links keep
+  working.
+
 ## 3.0.0
 
 First public release. One SKSE plugin, built on CommonLibSSE-NG with
